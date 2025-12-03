@@ -1,0 +1,24 @@
+{
+  "name": "government-contract-evaluator-agent",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Sifen1995/government-contract-evaluator-agent.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Sifen1995/government-contract-evaluator-agent/issues"
+  },
+  "homepage": "https://github.com/Sifen1995/government-contract-evaluator-agent#readme",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.71.0"
+  }
+}

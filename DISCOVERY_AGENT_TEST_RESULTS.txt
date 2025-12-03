@@ -1,0 +1,213 @@
+================================================================================
+GOVAI - DISCOVERY AGENT TEST
+Testing SAM.gov API Integration
+================================================================================
+
+TEST 1: SAM.gov API Connectivity
+--------------------------------------------------------------------------------
+API Key: SAM-7bba4f42-c605-48... (truncated)
+API Endpoint: https://api.sam.gov/opportunities/v2/search
+
+Query Parameters:
+  - Posted From: 11/19/2025
+  - Posted To: 12/03/2025
+  - Type: o,k
+  - Limit: 10
+
+Making API request...
+Response Status Code: 200
+
+[SUCCESS] API call successful!
+
+================================================================================
+RESPONSE DATA ANALYSIS
+================================================================================
+
+Total Records Found: 5219
+Opportunities Returned: 10
+
+--------------------------------------------------------------------------------
+SAMPLE OPPORTUNITIES (First 3)
+--------------------------------------------------------------------------------
+
+OPPORTUNITY #1
+  Title: 59--CONNECTOR,PLUG,ELEC
+  Notice ID: bc6b43f57abf4c7c90a5e3fb3c549745
+  Type: Combined Synopsis/Solicitation
+  Department: N/A
+  Sub-Tier: N/A
+  Office: N/A
+  Posted Date: 2025-12-03
+  Response Deadline: 2025-12-19
+  NAICS Code: 334417
+  Set-Aside: SBA
+  Award Amount: N/A
+  Description: https://api.sam.gov/prod/opportunities/v1/noticedesc?noticeid=bc6b43f57abf4c7c90a5e3fb3c549745
+  Contact: Questions regarding this solicitation should be emailed to the buyer listed in block 5 of the solicitation document which can be found under the Additional Information link.
+If the Additional Information link does not work, please go to https://www.dibbs.bsm.dla.mil/Solicitations/ and type the solicitation number in the Global Search box.
+ (DibbsBSM@dla.mil)
+
+OPPORTUNITY #2
+  Title: Retrofit Service of the Energy Dispersive X-ray  Spectrometer (EDS) for the Scanning Electron Microscope (SEM)
+  Notice ID: aac0f5ee631c4bae987e615edaf5aeb8
+  Type: Solicitation
+  Department: N/A
+  Sub-Tier: N/A
+  Office: N/A
+  Posted Date: 2025-12-03
+  Response Deadline: 2025-12-08T16:00:00+09:00
+  NAICS Code: 811210
+  Set-Aside: None
+  Award Amount: N/A
+  Description: https://api.sam.gov/prod/opportunities/v1/noticedesc?noticeid=aac0f5ee631c4bae987e615edaf5aeb8
+  Contact: Maya Ichikawa (maya.ichikawa.ln@us.navy.mil)
+
+OPPORTUNITY #3
+  Title: 61--POWER SUPPLY
+  Notice ID: ffe86bd9d4ac4c04aaeb516f86984cb7
+  Type: Combined Synopsis/Solicitation
+  Department: N/A
+  Sub-Tier: N/A
+  Office: N/A
+  Posted Date: 2025-12-02
+  Response Deadline: 2025-12-17
+  NAICS Code: 334416
+  Set-Aside: None
+  Award Amount: N/A
+  Description: https://api.sam.gov/prod/opportunities/v1/noticedesc?noticeid=ffe86bd9d4ac4c04aaeb516f86984cb7
+  Contact: Questions regarding this solicitation should be emailed to the buyer listed in block 5 of the solicitation document which can be found under the Additional Information link.
+If the Additional Information link does not work, please go to https://www.dibbs.bsm.dla.mil/Solicitations/ and type the solicitation number in the Global Search box.
+ (DibbsBSM@dla.mil)
+
+================================================================================
+DETAILED DATA FOR FIRST OPPORTUNITY
+================================================================================
+
+{
+  "noticeId": "bc6b43f57abf4c7c90a5e3fb3c549745",
+  "title": "59--CONNECTOR,PLUG,ELEC",
+  "solicitationNumber": "SPE7M526Q0162",
+  "fullParentPathName": "DEPT OF DEFENSE.DEFENSE LOGISTICS AGENCY.DLA MARITIME.DLA MARITIME COLUMBUS.DLA LAND AND MARITIME",
+  "fullParentPathCode": "097.97AS.DLA MARITIME.DLA MARITIME COLUMBS.SPE7M5",
+  "postedDate": "2025-12-03",
+  "type": "Combined Synopsis/Solicitation",
+  "baseType": "Combined Synopsis/Solicitation",
+  "archiveType": "autocustom",
+  "archiveDate": "2026-01-18",
+  "typeOfSetAsideDescription": "Total Small Business Set-Aside (FAR 19.5)",
+  "typeOfSetAside": "SBA",
+  "responseDeadLine": "2025-12-19",
+  "naicsCode": "334417",
+  "naicsCodes": [
+    "334417"
+  ],
+  "classificationCode": "59",
+  "active": "Yes",
+  "award": null,
+  "pointOfContact": [
+    {
+      "fax": null,
+      "type": "primary",
+      "email": "DibbsBSM@dla.mil",
+      "phone": null,
+      "title": null,
+      "fullName": "Questions regarding this solicitation should be emailed to the buyer listed in block 5 of the solicitation document which can be found under the Additional Information link.\nIf the Additional Information link does not work, please go to https://www.dibbs.bsm.dla.mil/Solicitations/ and type the solicitation number in the Global Search box.\n"
+    }
+  ],
+  "description": "https://api.sam.gov/prod/opportunities/v1/noticedesc?noticeid=bc6b43f57abf4c7c90a5e3fb3c549745",
+  "organizationType": "OFFICE",
+  "officeAddress": {
+    "zipcode": "43218-3990",
+    "city": "COLUMBUS",
+    "countryCode": "USA",
+    "state": "OH"
+  },
+  "placeOfPerformance": null,
+  "additionalInfoLink": null,
+  "uiLink": "https://sam.gov/workspace/contract/opp/bc6b43f57abf4c7c90a5e3fb3c549745/view",
+  "links": [
+    {
+      "rel": "self",
+      "href": "https://api.sam.gov/prod/opportunities/v2/search?noticeid=bc6b43f57abf4c7c90a5e3fb3c549745&limit=1"
+    }
+  ],
+  "resourceLinks": null
+}
+
+
+================================================================================
+TEST 2: Filtered Search (IT Services - NAICS 541512, 541519)
+================================================================================
+
+Making filtered API request...
+[SUCCESS] Filtered Results: 5 opportunities
+
+1. 59--CONNECTOR,PLUG,ELEC
+   NAICS: 334417
+   Set-Aside: SBA
+   Deadline: 2025-12-19
+
+2. Retrofit Service of the Energy Dispersive X-ray  Spectrometer (EDS) for the Scanning Electron Microscope (SEM)
+   NAICS: 811210
+   Set-Aside: None
+   Deadline: 2025-12-08T16:00:00+09:00
+
+3. 61--POWER SUPPLY
+   NAICS: 334416
+   Set-Aside: None
+   Deadline: 2025-12-17
+
+4. 53--SPRING,HELICAL,COMP
+   NAICS: 332722
+   Set-Aside: None
+   Deadline: 2025-12-17
+
+5. FCI MCKEAN 2ND QTR FY26 SUBSISTENCE ITEMS
+   NAICS: 311999
+   Set-Aside: SBA
+   Deadline: 2025-12-08T15:00:00-05:00
+
+
+================================================================================
+TEST 3: Set-Aside Filter (Small Business)
+================================================================================
+
+Making set-aside filtered request...
+[SUCCESS] Small Business Set-Aside Results: 5 opportunities
+
+1. 59--CONNECTOR,PLUG,ELEC
+   Agency: N/A
+   Set-Aside: SBA
+
+2. Retrofit Service of the Energy Dispersive X-ray  Spectrometer (EDS) for the Scanning Electron Microscope (SEM)
+   Agency: N/A
+   Set-Aside: None
+
+3. 61--POWER SUPPLY
+   Agency: N/A
+   Set-Aside: None
+
+4. 53--SPRING,HELICAL,COMP
+   Agency: N/A
+   Set-Aside: None
+
+5. FCI MCKEAN 2ND QTR FY26 SUBSISTENCE ITEMS
+   Agency: N/A
+   Set-Aside: SBA
+
+
+================================================================================
+TEST SUMMARY
+================================================================================
+
+[SUCCESS] All tests passed!
+
+Total opportunities found: 5219
+IT services opportunities: 5
+Small business set-aside opportunities: 5
+
+Discovery Agent is working correctly with SAM.gov API!
+
+================================================================================
+Test completed at: 2025-12-03 00:43:52
+================================================================================
