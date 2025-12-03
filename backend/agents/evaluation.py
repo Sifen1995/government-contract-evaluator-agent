@@ -1,5 +1,5 @@
 """AI Evaluation Agent - Evaluates opportunities using GPT-4 or Claude"""
-import openai
+from openai import OpenAI
 from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.database import SessionLocal
@@ -12,13 +12,12 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-openai.api_key = settings.OPENAI_API_KEY
-
 
 class EvaluationAgent:
     """Agent for AI-powered opportunity evaluation"""
 
     def __init__(self):
+        self.client = OpenAI(api_key=settings.OPENAI_API_KEY)
         self.model = settings.OPENAI_MODEL
 
     def build_evaluation_prompt(self, company: Company, opportunity: Opportunity) -> str:
@@ -79,15 +78,16 @@ Scoring criteria:
         prompt = self.build_evaluation_prompt(company, opportunity)
 
         try:
-            # Call OpenAI API
-            response = openai.ChatCompletion.create(
+            # Call OpenAI API (new SDK)
+            response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
                     {"role": "system", "content": "You are an expert government contracting evaluator. Always respond with valid JSON."},
                     {"role": "user", "content": prompt}
                 ],
                 temperature=0.3,
-                max_tokens=1000
+                max_tokens=1000,
+                response_format={"type": "json_object"}
             )
 
             # Parse response

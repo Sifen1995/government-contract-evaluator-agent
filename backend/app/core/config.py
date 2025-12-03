@@ -38,7 +38,12 @@ class Settings(BaseSettings):
     FRONTEND_URL: str = "http://localhost:3000"
 
     # CORS
-    BACKEND_CORS_ORIGINS: list[str] = ["http://localhost:3000", "http://localhost:8000"]
+    BACKEND_CORS_ORIGINS: str = "http://localhost:3000,http://localhost:8000"
+
+    @property
+    def cors_origins(self) -> list[str]:
+        """Parse CORS origins from comma-separated string"""
+        return [origin.strip() for origin in self.BACKEND_CORS_ORIGINS.split(",")]
 
     # Celery
     CELERY_BROKER_URL: Optional[str] = None
@@ -47,6 +52,7 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         case_sensitive = True
+        extra = "ignore"  # Ignore extra fields from .env
 
 
 settings = Settings()

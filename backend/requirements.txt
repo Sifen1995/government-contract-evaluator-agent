@@ -7,6 +7,7 @@ python-multipart==0.0.6
 sqlalchemy==2.0.25
 psycopg2-binary==2.9.9
 alembic==1.13.1
+#pgvector==0.4.1  # Vector similarity search
 
 # Redis and Celery
 redis==5.0.1
@@ -19,7 +20,7 @@ pydantic[email]==2.5.3
 pydantic-settings==2.1.0
 
 # AI & APIs
-openai==1.9.0
+openai==1.54.0  # Updated to latest SDK
 requests==2.31.0
 
 # Email

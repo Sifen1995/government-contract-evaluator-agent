@@ -43,6 +43,7 @@ class Opportunity(Base):
     evaluations = relationship("Evaluation", back_populates="opportunity", cascade="all, delete-orphan")
     saved_by_users = relationship("SavedOpportunity", back_populates="opportunity", cascade="all, delete-orphan")
     dismissed_by_users = relationship("DismissedOpportunity", back_populates="opportunity", cascade="all, delete-orphan")
+    embedding = relationship("OpportunityEmbedding", back_populates="opportunity", uselist=False, cascade="all, delete-orphan")
 
     __table_args__ = (
         UniqueConstraint('source', 'source_id', name='uq_source_source_id'),

@@ -5,6 +5,7 @@ from .celery_app import celery_app
 from agents.discovery import run_discovery
 from agents.evaluation import run_evaluation
 from agents.email_agent import run_daily_digest, run_deadline_reminders
+from agents.embedding_agent import run_embedding_generation
 import logging
 
 logger = logging.getLogger(__name__)
@@ -58,6 +59,18 @@ def send_deadline_reminders():
         raise
 
 
+@shared_task(name="tasks.generate_embeddings")
+def generate_embeddings():
+    """Generate embeddings for new opportunities"""
+    logger.info("Starting embedding generation task")
+    try:
+        run_embedding_generation()
+        logger.info("Embedding generation completed")
+    except Exception as e:
+        logger.error(f"Error in embedding generation task: {e}")
+        raise
+
+
 # Configure beat schedule
 celery_app.conf.beat_schedule = {
     # Poll SAM.gov every 15 minutes
@@ -79,5 +92,10 @@ celery_app.conf.beat_schedule = {
     "send-deadline-reminders": {
         "task": "tasks.send_deadline_reminders",
         "schedule": crontab(hour=9, minute=0),
+    },
+    # Generate embeddings every 30 minutes
+    "generate-embeddings": {
+        "task": "tasks.generate_embeddings",
+        "schedule": crontab(minute="*/30"),
     },
 }
