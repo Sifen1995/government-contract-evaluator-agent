@@ -29,7 +29,7 @@ class OpportunityBase(BaseModel):
     contact_email: Optional[str] = None
     contact_phone: Optional[str] = None
     source_url: Optional[str] = None
-    attachments: Optional[List[dict]] = []
+    attachments: Optional[List[Any]] = []
     status: str = "active"
     raw_data: Optional[dict] = None
 

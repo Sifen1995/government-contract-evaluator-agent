@@ -5,6 +5,25 @@ An AI-powered platform that automatically finds and evaluates government contrac
 
 ---
 
+## 🚀 Quick Start Guides
+
+**Local Development with Remote Database (Recommended):**
+- **Quick Start:** See [QUICK_START_REMOTE.md](QUICK_START_REMOTE.md) for 5-step setup
+- **Full Guide:** See [REMOTE_DB_SETUP.md](REMOTE_DB_SETUP.md) for comprehensive documentation
+
+**Local Development with Local Database:**
+- See [QUICK_START.md](QUICK_START.md) for original local setup
+
+**Helper Scripts:**
+- `verify-setup.bat` - Check if all prerequisites are installed
+- `test-remote-db.bat` - Test connection to remote database
+- `start-redis.bat` - Start Redis (required for background tasks)
+- `setup-database.bat` - Initialize database tables
+- `start-backend.bat` - Start backend server
+- `start-frontend.bat` - Start frontend server
+
+---
+
 ## 🎉 What's Been Generated
 
 ### ✅ Backend (FastAPI) - COMPLETE

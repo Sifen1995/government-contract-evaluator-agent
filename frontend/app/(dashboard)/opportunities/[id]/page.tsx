@@ -80,7 +80,7 @@ export default function OpportunityDetailPage() {
     );
   }
 
-  const eval = opportunity.evaluation;
+  const evaluation = opportunity.evaluation;
   const daysRemaining = opportunity.response_deadline
     ? getDaysUntil(opportunity.response_deadline)
     : null;
@@ -126,21 +126,21 @@ export default function OpportunityDetailPage() {
       </div>
 
       {/* AI Analysis */}
-      {eval && (
+      {evaluation && (
         <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-2xl font-semibold">AI Analysis</h2>
-            <div className="text-4xl font-bold text-blue-600">{eval.fit_score}</div>
+            <div className="text-4xl font-bold text-blue-600">{evaluation.fit_score}</div>
           </div>
 
           <div className="grid grid-cols-2 gap-6 mb-6">
             <div>
               <div className="text-sm text-gray-600 mb-1">Recommendation</div>
-              <div className="text-xl font-semibold">{eval.recommendation} ✓</div>
+              <div className="text-xl font-semibold">{evaluation.recommendation} ✓</div>
             </div>
             <div>
               <div className="text-sm text-gray-600 mb-1">Win Probability</div>
-              <div className="text-xl font-semibold">{eval.win_probability}%</div>
+              <div className="text-xl font-semibold">{evaluation.win_probability}%</div>
             </div>
           </div>
 
@@ -148,7 +148,7 @@ export default function OpportunityDetailPage() {
             <div>
               <h3 className="font-semibold mb-2 text-green-700">Strengths</h3>
               <ul className="space-y-1">
-                {eval.strengths?.map((strength, idx) => (
+                {evaluation.strengths?.map((strength, idx) => (
                   <li key={idx} className="text-sm flex items-start gap-2">
                     <span className="text-green-600">✓</span>
                     <span>{strength}</span>
@@ -159,7 +159,7 @@ export default function OpportunityDetailPage() {
             <div>
               <h3 className="font-semibold mb-2 text-red-700">Weaknesses</h3>
               <ul className="space-y-1">
-                {eval.weaknesses?.map((weakness, idx) => (
+                {evaluation.weaknesses?.map((weakness, idx) => (
                   <li key={idx} className="text-sm flex items-start gap-2">
                     <span className="text-red-600">⚠</span>
                     <span>{weakness}</span>
@@ -171,7 +171,7 @@ export default function OpportunityDetailPage() {
 
           <div className="border-t pt-4">
             <h3 className="font-semibold mb-2">Summary</h3>
-            <p className="text-gray-700">{eval.executive_summary}</p>
+            <p className="text-gray-700">{evaluation.executive_summary}</p>
           </div>
         </div>
       )}

@@ -1,33 +1,32 @@
 @echo off
 echo ====================================
-echo GovAI Database Setup
+echo GovAI Remote Database Setup
 echo ====================================
 echo.
 
 echo This script will:
-echo 1. Create the govai database
-echo 2. Enable pgvector extension
-echo 3. Run all migrations
+echo 1. Enable pgvector extension (if not enabled)
+echo 2. Run all migrations to remote database
+echo 3. Verify tables were created
 echo.
-echo Make sure PostgreSQL is running!
+echo Using Remote AWS RDS PostgreSQL:
+echo   Host: betehomes-prod.czjyhxu2w9yy.us-east-1.rds.amazonaws.com
+echo   Database: sam_gov_dev
+echo   User: sam_gov_dev_user
 echo.
 pause
 
 echo.
-echo Creating database...
-psql -U sifenGovAI -c "DROP DATABASE IF EXISTS \"GovAI\";"
-psql -U sifenGovAI -c "CREATE DATABASE \"GovAI\";"
-
-echo.
-echo Enabling pgvector extension...
-psql -U sifenGovAI -d GovAI -c "CREATE EXTENSION IF NOT EXISTS vector;"
+echo Enabling pgvector extension on remote database...
+set PGPASSWORD=SamGovDev2024Secure
+psql -h betehomes-prod.czjyhxu2w9yy.us-east-1.rds.amazonaws.com -U sam_gov_dev_user -d sam_gov_dev -c "CREATE EXTENSION IF NOT EXISTS vector;"
 
 echo.
 echo Verifying extension...
-psql -U sifenGovAI -d GovAI -c "SELECT * FROM pg_extension WHERE extname = 'vector';"
+psql -h betehomes-prod.czjyhxu2w9yy.us-east-1.rds.amazonaws.com -U sam_gov_dev_user -d sam_gov_dev -c "SELECT * FROM pg_extension WHERE extname = 'vector';"
 
 echo.
-echo Running migrations...
+echo Running migrations to remote database...
 cd backend
 python -m alembic upgrade head
 
@@ -37,7 +36,7 @@ python -c "from app.core.database import engine; from sqlalchemy import inspect;
 
 echo.
 echo ====================================
-echo Database setup complete!
+echo Remote database setup complete!
 echo ====================================
 echo.
 pause

@@ -17,18 +17,27 @@ router = APIRouter(prefix="/opportunities", tags=["opportunities"])
 
 @router.get("", response_model=OpportunityList)
 def list_opportunities(
-    set_aside: Optional[str] = None,
-    agency: Optional[str] = None,
-    naics_code: Optional[str] = None,
-    min_score: Optional[int] = None,
+    set_aside: Optional[str] = Query(None),
+    agency: Optional[str] = Query(None),
+    naics_code: Optional[str] = Query(None),
+    min_score: Optional[int] = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    sort_by: str = Query("fit_score", regex="^(fit_score|deadline|posted_date)$"),
-    sort_order: str = Query("desc", regex="^(asc|desc)$"),
+    sort_by: Optional[str] = Query("fit_score"),
+    sort_order: Optional[str] = Query("desc"),
     current_user: User = Depends(require_verified_email),
     db: Session = Depends(get_db)
 ):
     """List opportunities with evaluations"""
+    # Convert empty strings to None
+    set_aside = set_aside if set_aside and set_aside.strip() else None
+    agency = agency if agency and agency.strip() else None
+    naics_code = naics_code if naics_code and naics_code.strip() else None
+
+    # Validate and set defaults for sort parameters
+    sort_by = sort_by if sort_by and sort_by in ["fit_score", "deadline", "posted_date"] else "fit_score"
+    sort_order = sort_order if sort_order and sort_order in ["asc", "desc"] else "desc"
+
     filters = OpportunityFilter(
         set_aside=set_aside,
         agency=agency,

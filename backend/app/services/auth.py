@@ -24,6 +24,7 @@ def create_user(db: Session, user_data: UserCreate) -> User:
         first_name=user_data.first_name,
         last_name=user_data.last_name,
         email_frequency=user_data.email_frequency,
+        email_verified=True  # Auto-verify for local development
     )
 
     db.add(user)

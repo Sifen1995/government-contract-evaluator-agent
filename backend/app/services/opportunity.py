@@ -25,9 +25,17 @@ def get_opportunities_for_user(
     if user.company and user.company.naics_codes:
         query = query.filter(Opportunity.naics_code.in_(user.company.naics_codes))
 
-    # Filter by user's company set-asides
+    # Filter by user's company set-asides (include opportunities with no set-aside)
     if user.company and user.company.set_asides:
-        query = query.filter(Opportunity.set_aside_type.in_(user.company.set_asides))
+        # Include opportunities that match company set-asides OR have no set-aside (open to all)
+        query = query.filter(
+            or_(
+                Opportunity.set_aside_type.in_(user.company.set_asides),
+                Opportunity.set_aside_type.is_(None),
+                Opportunity.set_aside_type == '',
+                Opportunity.set_aside_type == 'NONE'
+            )
+        )
 
     # Exclude dismissed opportunities
     dismissed_ids = db.query(DismissedOpportunity.opportunity_id).filter(
