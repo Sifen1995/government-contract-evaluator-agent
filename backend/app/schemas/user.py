@@ -1,35 +1,29 @@
 from pydantic import BaseModel, EmailStr, Field
 from typing import Optional
 from datetime import datetime
-import uuid
 
 
 class UserBase(BaseModel):
     email: EmailStr
     first_name: Optional[str] = None
     last_name: Optional[str] = None
-    email_frequency: str = "daily"
 
 
 class UserCreate(UserBase):
-    password: str = Field(..., min_length=8)
+    password: str = Field(..., min_length=8, description="Password must be at least 8 characters")
 
 
 class UserUpdate(BaseModel):
     first_name: Optional[str] = None
     last_name: Optional[str] = None
-    email_frequency: Optional[str] = None
+    email_frequency: Optional[str] = Field(None, pattern="^(daily|weekly|realtime|none)$")
 
 
-class UserLogin(BaseModel):
-    email: EmailStr
-    password: str
-
-
-class User(UserBase):
-    id: uuid.UUID
+class UserResponse(UserBase):
+    id: str
     email_verified: bool
-    company_id: Optional[uuid.UUID] = None
+    company_id: Optional[str] = None
+    email_frequency: str
     created_at: datetime
     last_login_at: Optional[datetime] = None
 
@@ -37,20 +31,8 @@ class User(UserBase):
         from_attributes = True
 
 
-class TokenResponse(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
-    user: User
+class UserInDB(UserResponse):
+    password_hash: str
 
-
-class PasswordResetRequest(BaseModel):
-    email: EmailStr
-
-
-class PasswordReset(BaseModel):
-    token: str
-    new_password: str = Field(..., min_length=8)
-
-
-class EmailVerify(BaseModel):
-    token: str
+    class Config:
+        from_attributes = True

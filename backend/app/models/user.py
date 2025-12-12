@@ -1,26 +1,35 @@
-from sqlalchemy import Column, String, Boolean, TIMESTAMP, ForeignKey
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey
+from sqlalchemy.dialects.mysql import CHAR
 from sqlalchemy.orm import relationship
-from sqlalchemy.sql import func
+from datetime import datetime
 import uuid
-from ..core.database import Base
+from app.core.database import Base
+
+
+def generate_uuid():
+    return str(uuid.uuid4())
 
 
 class User(Base):
     __tablename__ = "users"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column(CHAR(36), primary_key=True, default=generate_uuid)
     email = Column(String(255), unique=True, nullable=False, index=True)
     password_hash = Column(String(255), nullable=False)
-    email_verified = Column(Boolean, default=False)
-    first_name = Column(String(100))
-    last_name = Column(String(100))
-    company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id", ondelete="CASCADE"))
-    email_frequency = Column(String(20), default="daily")
-    created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
-    last_login_at = Column(TIMESTAMP(timezone=True))
+    email_verified = Column(Boolean, default=False, nullable=False)
+    verification_token = Column(String(255), nullable=True)
+    verification_token_expires = Column(DateTime, nullable=True)
+    password_reset_token = Column(String(255), nullable=True)
+    password_reset_expires = Column(DateTime, nullable=True)
+    first_name = Column(String(100), nullable=True)
+    last_name = Column(String(100), nullable=True)
+    company_id = Column(CHAR(36), ForeignKey("companies.id", ondelete="CASCADE"), nullable=True)
+    email_frequency = Column(String(20), default="daily", nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    last_login_at = Column(DateTime, nullable=True)
 
     # Relationships
     company = relationship("Company", back_populates="users")
-    saved_opportunities = relationship("SavedOpportunity", back_populates="user", cascade="all, delete-orphan")
-    dismissed_opportunities = relationship("DismissedOpportunity", back_populates="user", cascade="all, delete-orphan")
+
+    def __repr__(self):
+        return f"<User {self.email}>"

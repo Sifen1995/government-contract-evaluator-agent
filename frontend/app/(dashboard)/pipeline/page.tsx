@@ -1,171 +1,401 @@
-"use client";
+'use client'
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import Link from "next/link";
-import api from "@/lib/api";
-import { formatDate } from "@/lib/utils";
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { useAuth } from '@/hooks/useAuth'
+import { getEvaluations, updateEvaluation } from '@/lib/opportunities'
+import { EvaluationWithOpportunity } from '@/types/opportunity'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
 
-const STATUSES = ["watching", "pursuing", "submitted", "won", "lost"];
+type PipelineStatus = 'WATCHING' | 'BIDDING' | 'WON' | 'LOST'
+
+interface PipelineColumn {
+  status: PipelineStatus
+  title: string
+  color: string
+  bgColor: string
+  icon: string
+}
+
+const PIPELINE_COLUMNS: PipelineColumn[] = [
+  { status: 'WATCHING', title: 'Watching', color: 'text-blue-600', bgColor: 'bg-blue-50 border-blue-200', icon: '👀' },
+  { status: 'BIDDING', title: 'Bidding', color: 'text-purple-600', bgColor: 'bg-purple-50 border-purple-200', icon: '📝' },
+  { status: 'WON', title: 'Won', color: 'text-green-600', bgColor: 'bg-green-50 border-green-200', icon: '🎉' },
+  { status: 'LOST', title: 'Lost', color: 'text-gray-600', bgColor: 'bg-gray-50 border-gray-200', icon: '❌' },
+]
 
 export default function PipelinePage() {
-  const router = useRouter();
-  const [savedOpportunities, setSavedOpportunities] = useState<any[]>([]);
-  const [stats, setStats] = useState<any>(null);
-  const [selectedStatus, setSelectedStatus] = useState<string>("");
-  const [loading, setLoading] = useState(true);
+  const { user, loading: authLoading, logout } = useAuth()
+  const router = useRouter()
+  const [evaluations, setEvaluations] = useState<EvaluationWithOpportunity[]>([])
+  const [loading, setLoading] = useState(true)
+  const [updating, setUpdating] = useState<string | null>(null)
 
   useEffect(() => {
-    fetchData();
-  }, [selectedStatus]);
+    if (!authLoading && !user) {
+      router.push('/login')
+    }
+  }, [user, authLoading, router])
 
-  const fetchData = async () => {
-    const token = localStorage.getItem("token");
-    if (!token) {
-      router.push("/login");
-      return;
+  useEffect(() => {
+    const loadPipeline = async () => {
+      if (!user) return
+
+      try {
+        // Load all evaluations that have been saved to pipeline
+        const data = await getEvaluations({ limit: 100 })
+        // Filter to only show those in pipeline
+        const pipelineItems = data.evaluations.filter(e => e.user_saved)
+        setEvaluations(pipelineItems)
+      } catch (error) {
+        console.error('Error loading pipeline:', error)
+      } finally {
+        setLoading(false)
+      }
     }
 
-    try {
-      const [pipelineData, statsData]: any = await Promise.all([
-        api.pipeline.list(token, selectedStatus || undefined),
-        api.pipeline.stats(token),
-      ]);
+    if (user) {
+      loadPipeline()
+    }
+  }, [user])
 
-      setSavedOpportunities(pipelineData);
-      setStats(statsData);
+  const handleStatusChange = async (evaluationId: string, newStatus: PipelineStatus) => {
+    try {
+      setUpdating(evaluationId)
+      await updateEvaluation(evaluationId, { user_saved: newStatus })
+
+      // Update local state
+      setEvaluations(prev =>
+        prev.map(e =>
+          e.id === evaluationId ? { ...e, user_saved: newStatus } : e
+        )
+      )
     } catch (error) {
-      console.error("Error fetching pipeline:", error);
+      console.error('Error updating status:', error)
+      alert('Failed to update status')
     } finally {
-      setLoading(false);
+      setUpdating(null)
     }
-  };
-
-  const handleStatusChange = async (savedId: string, newStatus: string) => {
-    const token = localStorage.getItem("token");
-    if (!token) return;
-
-    try {
-      // Find the opportunity ID from the saved data
-      const saved = savedOpportunities.find((s) => s.saved.id === savedId);
-      if (!saved) return;
-
-      await api.opportunities.updateStatus(token, saved.opportunity.id, newStatus);
-      fetchData();
-    } catch (error: any) {
-      alert(error.message || "Failed to update status");
-    }
-  };
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-96">
-        <div className="text-gray-500">Loading...</div>
-      </div>
-    );
   }
 
-  return (
-    <div>
-      <h1 className="text-3xl font-bold mb-8">Pipeline</h1>
+  const handleRemoveFromPipeline = async (evaluationId: string) => {
+    if (!confirm('Remove this opportunity from your pipeline?')) return
 
-      {/* Stats */}
-      {stats && (
-        <div className="grid grid-cols-5 gap-4 mb-8">
-          {STATUSES.map((status) => (
-            <div
-              key={status}
-              className="bg-white p-4 rounded-lg shadow-sm cursor-pointer hover:shadow-md transition"
-              onClick={() => setSelectedStatus(status === selectedStatus ? "" : status)}
-            >
-              <div className="text-sm text-gray-600 capitalize mb-1">{status}</div>
-              <div className="text-2xl font-bold">
-                {stats[status as keyof typeof stats] || 0}
+    try {
+      setUpdating(evaluationId)
+      await updateEvaluation(evaluationId, { user_saved: null })
+
+      // Remove from local state
+      setEvaluations(prev => prev.filter(e => e.id !== evaluationId))
+    } catch (error) {
+      console.error('Error removing from pipeline:', error)
+      alert('Failed to remove from pipeline')
+    } finally {
+      setUpdating(null)
+    }
+  }
+
+  const getEvaluationsByStatus = (status: PipelineStatus) => {
+    return evaluations.filter(e => e.user_saved === status)
+  }
+
+  const formatDate = (date: string | undefined) => {
+    if (!date) return 'N/A'
+    return new Date(date).toLocaleDateString()
+  }
+
+  const formatCurrency = (value: number | undefined) => {
+    if (!value) return 'N/A'
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(value)
+  }
+
+  const isDeadlineSoon = (deadline: string | undefined) => {
+    if (!deadline) return false
+    const deadlineDate = new Date(deadline)
+    const today = new Date()
+    const daysUntil = Math.ceil((deadlineDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+    return daysUntil <= 7 && daysUntil >= 0
+  }
+
+  const isDeadlinePassed = (deadline: string | undefined) => {
+    if (!deadline) return false
+    return new Date(deadline) < new Date()
+  }
+
+  if (authLoading || loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    )
+  }
+
+  if (!user) return null
+
+  // Stats
+  const totalInPipeline = evaluations.length
+  const totalWatching = getEvaluationsByStatus('WATCHING').length
+  const totalBidding = getEvaluationsByStatus('BIDDING').length
+  const totalWon = getEvaluationsByStatus('WON').length
+  const totalLost = getEvaluationsByStatus('LOST').length
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <nav className="bg-white border-b border-gray-200">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between h-16">
+            <div className="flex items-center gap-6">
+              <h1 className="text-2xl font-bold text-gray-900">GovAI</h1>
+              <div className="flex gap-4">
+                <Button variant="ghost" onClick={() => router.push('/dashboard')}>
+                  Dashboard
+                </Button>
+                <Button variant="ghost" onClick={() => router.push('/opportunities')}>
+                  Opportunities
+                </Button>
+                <Button variant="ghost" className="text-blue-600">
+                  Pipeline
+                </Button>
+                <Button variant="ghost" onClick={() => router.push('/settings')}>
+                  Settings
+                </Button>
               </div>
             </div>
-          ))}
-        </div>
-      )}
-
-      {/* Filter */}
-      <div className="bg-white rounded-lg shadow-sm p-4 mb-6">
-        <div className="flex items-center gap-4">
-          <label className="text-sm font-medium text-gray-700">Filter by status:</label>
-          <select
-            value={selectedStatus}
-            onChange={(e) => setSelectedStatus(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-md"
-          >
-            <option value="">All Statuses</option>
-            {STATUSES.map((status) => (
-              <option key={status} value={status}>
-                {status.charAt(0).toUpperCase() + status.slice(1)}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
-
-      {/* Opportunities */}
-      <div className="bg-white rounded-lg shadow-sm divide-y divide-gray-200">
-        {savedOpportunities.length === 0 ? (
-          <div className="p-12 text-center text-gray-500">
-            No opportunities in your pipeline yet.{" "}
-            <Link href="/opportunities" className="text-blue-600 hover:underline">
-              Browse opportunities
-            </Link>
+            <div className="flex items-center gap-4">
+              <span className="text-sm text-gray-700">{user.email}</span>
+              <Button onClick={logout} variant="outline">
+                Logout
+              </Button>
+            </div>
           </div>
+        </div>
+      </nav>
+
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="mb-8">
+          <h2 className="text-3xl font-bold text-gray-900 mb-2">Pipeline Management</h2>
+          <p className="text-gray-600">Track your opportunities through the bidding process</p>
+        </div>
+
+        {/* Stats Cards */}
+        <div className="grid grid-cols-5 gap-4 mb-8">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-2xl font-bold text-gray-900">{totalInPipeline}</CardTitle>
+              <CardDescription>Total in Pipeline</CardDescription>
+            </CardHeader>
+          </Card>
+          <Card className="border-blue-200 bg-blue-50">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-2xl font-bold text-blue-600">{totalWatching}</CardTitle>
+              <CardDescription>Watching</CardDescription>
+            </CardHeader>
+          </Card>
+          <Card className="border-purple-200 bg-purple-50">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-2xl font-bold text-purple-600">{totalBidding}</CardTitle>
+              <CardDescription>Bidding</CardDescription>
+            </CardHeader>
+          </Card>
+          <Card className="border-green-200 bg-green-50">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-2xl font-bold text-green-600">{totalWon}</CardTitle>
+              <CardDescription>Won</CardDescription>
+            </CardHeader>
+          </Card>
+          <Card className="border-gray-200 bg-gray-50">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-2xl font-bold text-gray-600">{totalLost}</CardTitle>
+              <CardDescription>Lost</CardDescription>
+            </CardHeader>
+          </Card>
+        </div>
+
+        {totalInPipeline === 0 ? (
+          <Card className="text-center py-12">
+            <CardContent>
+              <div className="text-6xl mb-4">📋</div>
+              <h3 className="text-xl font-semibold mb-2">Your pipeline is empty</h3>
+              <p className="text-gray-600 mb-4">
+                Start by browsing opportunities and saving them to your pipeline
+              </p>
+              <Button onClick={() => router.push('/opportunities')}>
+                Browse Opportunities
+              </Button>
+            </CardContent>
+          </Card>
         ) : (
-          savedOpportunities.map((item) => (
-            <div key={item.saved.id} className="p-6">
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <Link
-                    href={`/opportunities/${item.opportunity.id}`}
-                    className="block hover:text-blue-600 mb-2"
-                  >
-                    <h3 className="font-semibold text-lg">{item.opportunity.title}</h3>
-                  </Link>
+          /* Kanban Board */
+          <div className="grid grid-cols-4 gap-4">
+            {PIPELINE_COLUMNS.map((column) => (
+              <div key={column.status} className={`rounded-lg border-2 ${column.bgColor} p-4`}>
+                <div className="flex items-center gap-2 mb-4">
+                  <span className="text-xl">{column.icon}</span>
+                  <h3 className={`font-semibold ${column.color}`}>
+                    {column.title} ({getEvaluationsByStatus(column.status).length})
+                  </h3>
+                </div>
 
-                  <div className="flex items-center gap-4 text-sm text-gray-600 mb-3">
-                    <span className="font-medium">{item.opportunity.agency}</span>
-                    {item.opportunity.response_deadline && (
-                      <span>
-                        Due: {formatDate(item.opportunity.response_deadline)}
-                      </span>
-                    )}
-                    {item.evaluation && (
-                      <span className="bg-blue-100 text-blue-800 px-2 py-0.5 rounded">
-                        Score: {item.evaluation.fit_score}
-                      </span>
-                    )}
-                  </div>
+                <div className="space-y-3">
+                  {getEvaluationsByStatus(column.status).map((evaluation) => (
+                    <Card
+                      key={evaluation.id}
+                      className={`cursor-pointer hover:shadow-md transition-shadow ${
+                        updating === evaluation.id ? 'opacity-50' : ''
+                      }`}
+                    >
+                      <CardContent className="p-4">
+                        <div
+                          className="cursor-pointer"
+                          onClick={() => router.push(`/opportunities/${evaluation.opportunity_id}`)}
+                        >
+                          <h4 className="font-medium text-sm line-clamp-2 mb-2">
+                            {evaluation.opportunity.title}
+                          </h4>
 
-                  {item.saved.notes && (
-                    <div className="text-sm text-gray-700 bg-gray-50 p-3 rounded">
-                      <span className="font-medium">Notes:</span> {item.saved.notes}
+                          <div className="flex items-center gap-2 mb-2">
+                            <Badge
+                              variant={
+                                evaluation.recommendation === 'BID'
+                                  ? 'default'
+                                  : evaluation.recommendation === 'RESEARCH'
+                                  ? 'secondary'
+                                  : 'destructive'
+                              }
+                              className="text-xs"
+                            >
+                              {evaluation.recommendation}
+                            </Badge>
+                            <span className="text-xs text-gray-500">
+                              {evaluation.fit_score}% fit
+                            </span>
+                          </div>
+
+                          <div className="text-xs text-gray-500 space-y-1">
+                            <div>{evaluation.opportunity.department}</div>
+                            <div className="flex items-center gap-1">
+                              <span>Deadline:</span>
+                              <span
+                                className={
+                                  isDeadlinePassed(evaluation.opportunity.response_deadline)
+                                    ? 'text-red-600 font-medium'
+                                    : isDeadlineSoon(evaluation.opportunity.response_deadline)
+                                    ? 'text-orange-600 font-medium'
+                                    : ''
+                                }
+                              >
+                                {formatDate(evaluation.opportunity.response_deadline)}
+                                {isDeadlinePassed(evaluation.opportunity.response_deadline) && ' (Passed)'}
+                                {isDeadlineSoon(evaluation.opportunity.response_deadline) &&
+                                  !isDeadlinePassed(evaluation.opportunity.response_deadline) && ' (Soon!)'}
+                              </span>
+                            </div>
+                            <div>Value: {formatCurrency(evaluation.opportunity.contract_value)}</div>
+                          </div>
+
+                          {evaluation.user_notes && (
+                            <div className="mt-2 p-2 bg-yellow-50 rounded text-xs text-gray-700">
+                              <strong>Notes:</strong> {evaluation.user_notes.substring(0, 50)}
+                              {evaluation.user_notes.length > 50 && '...'}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Status Change Buttons */}
+                        <div className="mt-3 pt-3 border-t border-gray-200">
+                          <div className="flex flex-wrap gap-1">
+                            {column.status !== 'WATCHING' && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="text-xs px-2 py-1 h-auto"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleStatusChange(evaluation.id, 'WATCHING')
+                                }}
+                                disabled={updating === evaluation.id}
+                              >
+                                👀
+                              </Button>
+                            )}
+                            {column.status !== 'BIDDING' && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="text-xs px-2 py-1 h-auto"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleStatusChange(evaluation.id, 'BIDDING')
+                                }}
+                                disabled={updating === evaluation.id}
+                              >
+                                📝
+                              </Button>
+                            )}
+                            {column.status !== 'WON' && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="text-xs px-2 py-1 h-auto text-green-600"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleStatusChange(evaluation.id, 'WON')
+                                }}
+                                disabled={updating === evaluation.id}
+                              >
+                                🎉
+                              </Button>
+                            )}
+                            {column.status !== 'LOST' && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="text-xs px-2 py-1 h-auto text-gray-600"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleStatusChange(evaluation.id, 'LOST')
+                                }}
+                                disabled={updating === evaluation.id}
+                              >
+                                ❌
+                              </Button>
+                            )}
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-xs px-2 py-1 h-auto text-red-600 ml-auto"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleRemoveFromPipeline(evaluation.id)
+                              }}
+                              disabled={updating === evaluation.id}
+                            >
+                              Remove
+                            </Button>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+
+                  {getEvaluationsByStatus(column.status).length === 0 && (
+                    <div className="text-center py-8 text-gray-400 text-sm">
+                      No opportunities
                     </div>
                   )}
                 </div>
-
-                <div className="ml-4">
-                  <select
-                    value={item.saved.status}
-                    onChange={(e) => handleStatusChange(item.saved.id, e.target.value)}
-                    className="px-3 py-2 border border-gray-300 rounded-md text-sm"
-                  >
-                    {STATUSES.map((status) => (
-                      <option key={status} value={status}>
-                        {status.charAt(0).toUpperCase() + status.slice(1)}
-                      </option>
-                    ))}
-                  </select>
-                </div>
               </div>
-            </div>
-          ))
+            ))}
+          </div>
         )}
-      </div>
+      </main>
     </div>
-  );
+  )
 }

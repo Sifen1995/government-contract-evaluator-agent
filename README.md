@@ -1,487 +1,349 @@
 # GovAI - AI-Powered Government Contract Discovery Platform
 
-## Project Overview
-An AI-powered platform that automatically finds and evaluates government contracting opportunities for users based on their company profile.
+An intelligent platform that automatically discovers, evaluates, and recommends government contracting opportunities using AI.
 
----
+## Tech Stack
 
-## 🚀 Quick Start Guides
+- **Backend**: Python 3.11 + FastAPI + SQLAlchemy + MySQL
+- **Frontend**: Next.js 14 + TypeScript + Tailwind CSS + shadcn/ui
+- **Database**: MySQL 8.0
+- **Cache/Queue**: Redis 7
+- **Task Queue**: Celery
+- **AI**: OpenAI GPT-4 (Week 3+)
+- **Email**: SendGrid (Week 5+)
 
-**Local Development with Remote Database (Recommended):**
-- **Quick Start:** See [QUICK_START_REMOTE.md](QUICK_START_REMOTE.md) for 5-step setup
-- **Full Guide:** See [REMOTE_DB_SETUP.md](REMOTE_DB_SETUP.md) for comprehensive documentation
+## Prerequisites
 
-**Local Development with Local Database:**
-- See [QUICK_START.md](QUICK_START.md) for original local setup
+- Docker & Docker Compose
+- Git
 
-**Helper Scripts:**
-- `verify-setup.bat` - Check if all prerequisites are installed
-- `test-remote-db.bat` - Test connection to remote database
-- `start-redis.bat` - Start Redis (required for background tasks)
-- `setup-database.bat` - Initialize database tables
-- `start-backend.bat` - Start backend server
-- `start-frontend.bat` - Start frontend server
+## Quick Start
 
----
+### 1. Clone and Setup
 
-## 🎉 What's Been Generated
+```bash
+# Clone the repository
+git clone <your-repo-url>
+cd government-contract-evaluator-agent-main
 
-### ✅ Backend (FastAPI) - COMPLETE
-**35 Python files** covering the entire backend architecture:
+# Copy environment file
+cp .env.example .env
 
-#### Core Infrastructure
-- `backend/app/core/config.py` - Application configuration with Pydantic settings
-- `backend/app/core/database.py` - PostgreSQL connection and session management
-- `backend/app/core/security.py` - JWT authentication, password hashing, user dependencies
+# Edit .env and set secure passwords for production
+```
 
-#### Database Models (SQLAlchemy)
-- `backend/app/models/user.py` - User model
-- `backend/app/models/company.py` - Company profile model
-- `backend/app/models/opportunity.py` - Government opportunities model
-- `backend/app/models/evaluation.py` - AI evaluation results model
-- `backend/app/models/saved_opportunity.py` - Pipeline/saved opportunities
+### 2. Start All Services
 
-#### API Schemas (Pydantic)
-- `backend/app/schemas/user.py` - User validation schemas
-- `backend/app/schemas/company.py` - Company validation schemas
-- `backend/app/schemas/opportunity.py` - Opportunity validation schemas
-- `backend/app/schemas/evaluation.py` - Evaluation validation schemas
-- `backend/app/schemas/pipeline.py` - Pipeline validation schemas
+```bash
+# Start all services (MySQL, Redis, Backend, Frontend, Celery)
+docker-compose up -d
 
-#### Business Logic Services
-- `backend/app/services/auth.py` - Authentication logic
-- `backend/app/services/opportunity.py` - Opportunity matching and filtering logic
+# View logs
+docker-compose logs -f
 
-#### API Routers (FastAPI Endpoints)
-- `backend/app/api/auth.py` - POST /auth/register, /login, /logout, etc.
-- `backend/app/api/users.py` - GET/PUT /users/me
-- `backend/app/api/company.py` - GET/POST/PUT /company
-- `backend/app/api/opportunities.py` - All opportunity endpoints
-- `backend/app/api/pipeline.py` - Pipeline management endpoints
+# View specific service logs
+docker-compose logs -f backend
+docker-compose logs -f frontend
+```
 
-#### AI & Automation Agents
-- `backend/agents/discovery.py` - SAM.gov polling agent
-- `backend/agents/evaluation.py` - GPT-4 opportunity evaluation agent
-- `backend/agents/email_agent.py` - SendGrid daily digest agent
+### 3. Initialize Database
 
-#### Celery Task Queue
-- `backend/tasks/celery_app.py` - Celery configuration
-- `backend/tasks/scheduled.py` - Scheduled tasks (every 15 min discovery, hourly evaluation, daily digests)
+```bash
+# Run database migrations
+docker-compose exec backend alembic upgrade head
+```
 
-#### Application Entry Point
-- `backend/app/main.py` - FastAPI app with CORS and router configuration
-- `backend/requirements.txt` - All Python dependencies
-- `backend/alembic.ini` - Database migration configuration
+### 4. Access the Application
 
----
+- **Frontend**: http://localhost:3000
+- **Backend API**: http://localhost:8000
+- **API Documentation**: http://localhost:8000/docs (Swagger UI)
+- **Alternative API Docs**: http://localhost:8000/redoc
 
-### ✅ Frontend (Next.js 14) - Core Files Generated
-**3 TypeScript files** for core functionality:
+## Development
 
-- `frontend/lib/api.ts` - Complete API client with all endpoint methods
-- `frontend/lib/utils.ts` - Utility functions (date formatting, currency, etc.)
-- `frontend/types/index.ts` - TypeScript interfaces for all data models
-- `frontend/package.json` - All dependencies (Next.js 14, Tailwind, shadcn/ui)
+### Backend Development
 
----
+```bash
+# Access backend container
+docker-compose exec backend bash
 
-### ✅ Configuration Files
-- `.env.example` - Environment variables template
-- `README.md` - This file
+# Create new migration
+docker-compose exec backend alembic revision --autogenerate -m "description"
 
----
+# Run migrations
+docker-compose exec backend alembic upgrade head
 
-## 📁 Complete Directory Structure
+# Rollback migration
+docker-compose exec backend alembic downgrade -1
+
+# Python shell
+docker-compose exec backend python
+```
+
+### Frontend Development
+
+```bash
+# Access frontend container
+docker-compose exec frontend sh
+
+# Install new package
+docker-compose exec frontend npm install <package-name>
+
+# Rebuild frontend
+docker-compose restart frontend
+```
+
+### Database Access
+
+```bash
+# MySQL CLI
+docker-compose exec mysql mysql -u govai_user -p govai
+
+# Password: govai_password_change_me (or your custom password from .env)
+```
+
+### Redis CLI
+
+```bash
+docker-compose exec redis redis-cli
+```
+
+### Celery
+
+```bash
+# View worker status
+docker-compose logs -f celery-worker
+
+# View beat scheduler status
+docker-compose logs -f celery-beat
+```
+
+## Project Structure
 
 ```
-government-contract-evaluator-agent/
-├── backend/
-│   ├── agents/
-│   │   ├── discovery.py (SAM.gov polling)
-│   │   ├── evaluation.py (AI evaluation)
-│   │   └── email_agent.py (Email digests)
+government-contract-evaluator-agent-main/
+├── backend/                 # Python FastAPI backend
 │   ├── app/
-│   │   ├── api/
-│   │   │   ├── auth.py
-│   │   │   ├── users.py
-│   │   │   ├── company.py
-│   │   │   ├── opportunities.py
-│   │   │   └── pipeline.py
-│   │   ├── core/
-│   │   │   ├── config.py
-│   │   │   ├── database.py
-│   │   │   └── security.py
-│   │   ├── models/
-│   │   │   ├── user.py
-│   │   │   ├── company.py
-│   │   │   ├── opportunity.py
-│   │   │   ├── evaluation.py
-│   │   │   └── saved_opportunity.py
-│   │   ├── schemas/
-│   │   │   ├── user.py
-│   │   │   ├── company.py
-│   │   │   ├── opportunity.py
-│   │   │   ├── evaluation.py
-│   │   │   └── pipeline.py
-│   │   ├── services/
-│   │   │   ├── auth.py
-│   │   │   └── opportunity.py
-│   │   └── main.py
-│   ├── migrations/
-│   │   └── versions/
-│   ├── tasks/
-│   │   ├── celery_app.py
-│   │   └── scheduled.py
-│   ├── alembic.ini
+│   │   ├── api/            # API endpoints
+│   │   ├── core/           # Config, database, security
+│   │   ├── models/         # SQLAlchemy models
+│   │   ├── schemas/        # Pydantic schemas
+│   │   └── services/       # Business logic
+│   ├── agents/             # AI agents (Week 2+)
+│   ├── tasks/              # Celery tasks
+│   ├── alembic/            # Database migrations
 │   └── requirements.txt
 │
-├── frontend/
-│   ├── app/
-│   │   ├── (auth)/
-│   │   │   ├── login/
-│   │   │   ├── register/
-│   │   │   └── forgot-password/
-│   │   ├── (dashboard)/
-│   │   │   ├── dashboard/
-│   │   │   ├── opportunities/
-│   │   │   │   └── [id]/
-│   │   │   ├── pipeline/
-│   │   │   └── settings/
-│   │   └── onboarding/
-│   ├── components/
-│   │   ├── ui/
-│   │   ├── forms/
-│   │   └── dashboard/
-│   ├── lib/
-│   │   ├── api.ts (✅ Complete API client)
-│   │   └── utils.ts (✅ Utility functions)
-│   ├── types/
-│   │   └── index.ts (✅ All TypeScript types)
-│   └── package.json (✅ Dependencies)
+├── frontend/                # Next.js frontend
+│   ├── app/                # App router pages
+│   ├── components/         # React components
+│   ├── lib/                # Utilities
+│   ├── hooks/              # Custom hooks
+│   └── types/              # TypeScript types
 │
-├── scripts/
-│   ├── start_frontend.sh
-│   ├── start_backend.sh
-│   ├── start_worker.sh
-│   └── setup.sh
-│
-├── .env.example (✅ Complete)
-└── README.md (✅ This file)
+├── docker-compose.yml
+├── .env.example
+└── README.md
 ```
 
----
+## Completed Features
 
-## 🚀 Quick Start
+### Week 1: Authentication
+✅ User registration
+✅ Email verification (console-based for development)
+✅ Login/Logout with JWT authentication
+✅ Password reset flow
+✅ Protected routes
+✅ Docker Compose setup for all services
 
-### Prerequisites
-- Python 3.11+
-- Node.js 18+
-- PostgreSQL 15+
-- Redis 7+
+### Week 2: Company Onboarding
+✅ 3-step company onboarding wizard
+✅ NAICS code selection (searchable, up to 10)
+✅ Set-aside certifications (8(a), WOSB, SDVOSB, etc.)
+✅ Capabilities statement (500 words)
+✅ Contract value ranges
+✅ Geographic preferences
+✅ Company settings page
+✅ Reference data API
 
-### Backend Setup
+### Week 3: SAM.gov Integration & AI Evaluation
+✅ SAM.gov API integration
+✅ Automated opportunity discovery (every 15 minutes via Celery Beat)
+✅ NAICS code matching algorithm
+✅ OpenAI GPT-4 integration
+✅ Opportunity scoring (fit score 0-100, win probability 0-100)
+✅ BID/NO_BID/RESEARCH recommendations with detailed reasoning
+✅ Evaluation storage with strengths, weaknesses, and risk factors
+✅ Background tasks (discovery, evaluation, cleanup)
+✅ Opportunity and evaluation API endpoints
+✅ Statistics and filtering endpoints
+
+### Week 4: Dashboard & Opportunity Management
+✅ Opportunities list page with AI scores and recommendations
+✅ Filter by recommendation (BID/NO_BID/RESEARCH)
+✅ Filter by minimum fit score (50%, 60%, 70%, 80%)
+✅ Opportunity detail page with complete AI analysis
+✅ Display strengths, weaknesses, key requirements, and risk factors
+✅ Pipeline management (save as WATCHING, BIDDING, or PASSED)
+✅ Add personal notes to opportunities
+✅ Real-time statistics dashboard
+✅ Manual discovery trigger button
+✅ Pagination for large result sets
+✅ Responsive design (desktop, tablet, mobile)
+
+### Week 5: Pipeline Management + Email Notifications
+✅ Kanban-style pipeline board (WATCHING → BIDDING → WON/LOST)
+✅ Pipeline status transitions
+✅ Pipeline statistics (total, by status, win rate)
+✅ SendGrid email integration (with console fallback)
+✅ Daily digest emails (8 AM) with new BID recommendations
+✅ Deadline reminder emails (1, 3, 7 days before)
+✅ Email notification preferences (real-time, daily, weekly, none)
+✅ User settings for email frequency
+✅ Beautiful HTML email templates
+
+### Week 6: Polish + Launch (Current)
+✅ Global error boundary and error handling components
+✅ Loading states and skeleton components
+✅ Toast notifications for user feedback
+✅ Production Docker configuration (multi-stage builds)
+✅ Health check endpoints (/health, /health/detailed, /ready)
+✅ Rate limiting on authentication endpoints
+✅ Environment variable validation
+✅ Production deployment guide
+✅ Security hardening (non-root containers, resource limits)
+
+## Production Deployment
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) for comprehensive production deployment instructions.
+
+## Common Commands
 
 ```bash
-# 1. Navigate to backend
-cd backend
+# Start all services
+docker-compose up -d
 
-# 2. Create virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+# Stop all services
+docker-compose down
 
-# 3. Install dependencies
-pip install -r requirements.txt
+# Restart a service
+docker-compose restart backend
 
-# 4. Copy .env file from root
-cp ../.env.example .env
-# Edit .env with your API keys
+# View logs
+docker-compose logs -f
 
-# 5. Create database
-createdb govai
+# Rebuild after code changes
+docker-compose up -d --build
 
-# 6. Run migrations
-alembic upgrade head
-
-# 7. Start backend
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+# Stop and remove all containers, volumes
+docker-compose down -v
 ```
 
-### Celery Workers
+## Testing
+
+### Manual Testing (Week 1)
+
+1. **Register Flow**:
+   - Visit http://localhost:3000/register
+   - Register with email/password
+   - Check backend logs for verification link
+   - Click link to verify email
+
+2. **Login Flow**:
+   - Visit http://localhost:3000/login
+   - Login with verified credentials
+   - Should redirect to dashboard
+
+3. **Password Reset**:
+   - Visit http://localhost:3000/forgot-password
+   - Enter email
+   - Check backend logs for reset link
+   - Use link to reset password
+
+## Troubleshooting
+
+### Port Already in Use
 
 ```bash
-# Terminal 2: Start Celery worker
-cd backend
-celery -A tasks.celery_app worker --loglevel=info
+# Check what's using the port
+netstat -ano | findstr :3000
+netstat -ano | findstr :8000
+netstat -ano | findstr :3306
 
-# Terminal 3: Start Celery beat (scheduler)
-celery -A tasks.celery_app beat --loglevel=info
+# Stop Docker services and try again
+docker-compose down
+docker-compose up -d
 ```
 
-### Frontend Setup
+### Database Connection Issues
 
 ```bash
-# 1. Navigate to frontend
-cd frontend
+# Check MySQL is running
+docker-compose ps
 
-# 2. Install dependencies
-npm install
+# Check MySQL logs
+docker-compose logs mysql
 
-# 3. Create .env.local
-echo "NEXT_PUBLIC_API_URL=http://localhost:8000/api" > .env.local
-
-# 4. Start development server
-npm run dev
+# Recreate MySQL container
+docker-compose down
+docker-compose up -d mysql
 ```
 
-The app will be available at:
-- Frontend: http://localhost:3000
-- Backend API: http://localhost:8000
-- API Docs: http://localhost:8000/docs
+### Frontend Not Loading
 
----
+```bash
+# Rebuild frontend
+docker-compose up -d --build frontend
 
-## 📋 What Still Needs To Be Done
-
-### Frontend Pages (Need Implementation)
-The directory structure exists, but page content needs to be created:
-
-1. **Auth Pages**
-   - `frontend/app/(auth)/login/page.tsx`
-   - `frontend/app/(auth)/register/page.tsx`
-   - `frontend/app/(auth)/forgot-password/page.tsx`
-
-2. **Dashboard Pages**
-   - `frontend/app/(dashboard)/dashboard/page.tsx`
-   - `frontend/app/(dashboard)/opportunities/page.tsx`
-   - `frontend/app/(dashboard)/opportunities/[id]/page.tsx`
-   - `frontend/app/(dashboard)/pipeline/page.tsx`
-   - `frontend/app/(dashboard)/settings/page.tsx`
-
-3. **Onboarding Page**
-   - `frontend/app/onboarding/page.tsx`
-
-4. **Layout Files**
-   - `frontend/app/layout.tsx` (root layout)
-   - `frontend/app/(auth)/layout.tsx` (auth layout)
-   - `frontend/app/(dashboard)/layout.tsx` (dashboard layout)
-   - `frontend/app/page.tsx` (landing page)
-
-5. **UI Components** (using shadcn/ui)
-   - Button, Input, Select, Card, Badge, Dialog, etc.
-   - Install with: `npx shadcn-ui@latest init`
-
-6. **Configuration Files**
-   - `frontend/next.config.js`
-   - `frontend/tailwind.config.ts`
-   - `frontend/tsconfig.json`
-
-### Infrastructure Files
-1. **Docker**
-   - `docker-compose.yml` (PostgreSQL, Redis, Backend, Frontend)
-   - `backend/Dockerfile`
-   - `frontend/Dockerfile`
-
-2. **PM2 Configuration**
-   - `ecosystem.config.js` (PM2 process manager config)
-
-3. **Scripts**
-   - `scripts/start_frontend.sh`
-   - `scripts/start_backend.sh`
-   - `scripts/start_worker.sh`
-   - `scripts/setup.sh`
-
----
-
-## 🗄️ Database Schema
-
-The backend models define these PostgreSQL tables:
-
-- **users** - User accounts
-- **companies** - Company profiles
-- **opportunities** - Government contract opportunities from SAM.gov
-- **evaluations** - AI evaluation results (fit scores, recommendations)
-- **saved_opportunities** - User's pipeline (watching, pursuing, submitted, won, lost)
-- **dismissed_opportunities** - Opportunities user dismissed
-
----
-
-## 🔌 API Endpoints
-
-All endpoints are fully implemented in the backend:
-
-### Authentication
-- `POST /api/auth/register` - Register new user
-- `POST /api/auth/login` - Login user
-- `POST /api/auth/logout` - Logout user
-- `POST /api/auth/forgot-password` - Request password reset
-- `POST /api/auth/reset-password` - Reset password with token
-- `GET /api/auth/verify-email` - Verify email with token
-
-### Users
-- `GET /api/users/me` - Get current user
-- `PUT /api/users/me` - Update user profile
-- `PUT /api/users/me/preferences` - Update email preferences
-
-### Company
-- `GET /api/company` - Get company profile
-- `POST /api/company` - Create company (onboarding)
-- `PUT /api/company` - Update company profile
-
-### Opportunities
-- `GET /api/opportunities` - List opportunities (with filters, pagination, sorting)
-- `GET /api/opportunities/:id` - Get opportunity detail with AI evaluation
-- `POST /api/opportunities/:id/save` - Save to pipeline
-- `DELETE /api/opportunities/:id/save` - Remove from pipeline
-- `POST /api/opportunities/:id/dismiss` - Dismiss opportunity
-- `PUT /api/opportunities/:id/status` - Update pipeline status
-- `POST /api/opportunities/:id/notes` - Add notes
-
-### Pipeline
-- `GET /api/pipeline` - Get saved opportunities by status
-- `GET /api/pipeline/stats` - Get pipeline statistics
-- `GET /api/pipeline/deadlines` - Get upcoming deadlines
-
----
-
-## 🤖 Background Tasks
-
-### Discovery Agent
-- Runs every **15 minutes**
-- Polls SAM.gov API for new opportunities
-- Filters by NAICS codes from all companies
-- Stores opportunities in database
-
-### Evaluation Agent
-- Runs every **hour**
-- Evaluates new opportunities using GPT-4
-- Generates fit scores (0-100)
-- Provides BID/NO_BID/REVIEW recommendations
-- Lists strengths and weaknesses
-
-### Email Agent
-- Runs **daily at 8 AM**
-- Sends digest with top 5 opportunities
-- Only sends to verified emails with daily frequency
-
-### Deadline Reminders
-- Runs **daily at 9 AM**
-- Sends reminders for deadlines in next 3 days
-
----
-
-## 🔑 Environment Variables
-
-Copy `.env.example` to `.env` and fill in:
-
-- `DATABASE_URL` - PostgreSQL connection string
-- `REDIS_URL` - Redis connection string
-- `JWT_SECRET` - Secret key for JWT tokens (generate a strong random string)
-- `SAM_API_KEY` - Get from https://sam.gov (Account → API Key)
-- `OPENAI_API_KEY` - Get from https://platform.openai.com/api-keys
-- `SENDGRID_API_KEY` - Get from https://sendgrid.com
-- `EMAIL_FROM` - Your sender email (must be verified in SendGrid)
-
----
-
-## 📊 Architecture
-
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                          CloudFront (Production)                    │
-│         app.govai.com/* ──────────────▶ EC2:3000 (Next.js)         │
-│         app.govai.com/api/* ──────────▶ EC2:8000 (FastAPI)         │
-└─────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                            EC2 Instance                             │
-│   ┌─────────────┐  ┌─────────────┐  ┌─────────────┐                │
-│   │  Next.js    │  │  FastAPI    │  │   Celery    │                │
-│   │   :3000     │  │   :8000     │  │   Workers   │                │
-│   └─────────────┘  └─────────────┘  └─────────────┘                │
-│   ┌─────────────┐  ┌─────────────┐                                 │
-│   │   Redis     │  │ PostgreSQL  │                                 │
-│   │   :6379     │  │   :5432     │                                 │
-│   └─────────────┘  └─────────────┘                                 │
-└─────────────────────────────────────────────────────────────────────┘
-                 ┌──────────────────┼──────────────────┐
-                 ▼                  ▼                  ▼
-          ┌─────────────┐   ┌─────────────┐   ┌─────────────┐
-          │  SAM.gov    │   │   OpenAI    │   │  SendGrid   │
-          │    API      │   │   GPT-4     │   │   Email     │
-          └─────────────┘   └─────────────┘   └─────────────┘
+# Check for errors
+docker-compose logs frontend
 ```
 
----
+### Backend Errors
 
-## 📝 Next Steps
+```bash
+# Check backend logs
+docker-compose logs backend
 
-1. **Complete Frontend Pages**
-   - Install shadcn/ui components
-   - Create all auth and dashboard pages
-   - Implement forms for onboarding
+# Restart backend
+docker-compose restart backend
 
-2. **Create Docker Setup**
-   - docker-compose.yml for local development
-   - Dockerfiles for production deployment
+# Rebuild backend
+docker-compose up -d --build backend
+```
 
-3. **Add PM2 Configuration**
-   - Process management for production
-   - Auto-restart and logging
+## Environment Variables
 
-4. **Testing**
-   - Backend: pytest for API tests
-   - Frontend: Jest + React Testing Library
+See `.env.example` for all required environment variables. Key variables:
 
-5. **Deployment**
-   - Set up PostgreSQL RDS
-   - Configure Redis ElastiCache
-   - Deploy to EC2 with PM2
-   - Set up CloudFront CDN
+- `DATABASE_URL`: MySQL connection string
+- `REDIS_URL`: Redis connection string
+- `JWT_SECRET`: Secret key for JWT tokens (change in production!)
+- `CORS_ORIGINS`: Allowed frontend origins
+- `EMAIL_MODE`: `console` for development, `sendgrid` for production
 
----
+## Security Notes
 
-## 📚 Resources
+⚠️ **Important for Production**:
+- Change all default passwords in `.env`
+- Use strong `JWT_SECRET` (minimum 32 characters)
+- Enable HTTPS
+- Set `DEBUG=false`
+- Configure proper CORS origins
+- Use environment-specific `.env` files
 
-- **SAM.gov API Documentation**: https://open.gsa.gov/api/get-opportunities-public-api/
-- **FastAPI Documentation**: https://fastapi.tiangolo.com/
-- **Next.js 14 Documentation**: https://nextjs.org/docs
-- **shadcn/ui Components**: https://ui.shadcn.com/
+## Contributing
 
----
+This is an MVP development project following a 6-week build plan. See `docs/PRD_MVP.md` for complete product requirements.
 
-## 🏗️ Development Status
+## License
 
-| Component | Status | Files |
-|-----------|--------|-------|
-| Backend API | ✅ Complete | 35 files |
-| Backend Models | ✅ Complete | All tables |
-| Backend Services | ✅ Complete | Auth, Opportunity |
-| AI Agents | ✅ Complete | Discovery, Evaluation, Email |
-| Celery Tasks | ✅ Complete | All scheduled tasks |
-| Frontend API Client | ✅ Complete | Full typed client |
-| Frontend Types | ✅ Complete | All interfaces |
-| Frontend Pages | ⏳ Pending | Need implementation |
-| Frontend Components | ⏳ Pending | Need shadcn/ui |
-| Docker Setup | ⏳ Pending | Need docker-compose |
-| PM2 Config | ⏳ Pending | Need ecosystem.config.js |
+Proprietary - All rights reserved
 
----
+## Support
 
-## 🤝 Contributing
-
-This is an MVP project. Priority tasks:
-1. Frontend page implementation
-2. UI component library setup
-3. Docker containerization
-4. Production deployment scripts
-
----
-
-## 📄 License
-
-MIT
-
----
-
-**Built with ❤️ using FastAPI, Next.js 14, PostgreSQL, Redis, Celery, OpenAI GPT-4, and SendGrid**
+For issues and questions, please check:
+- Backend API docs: http://localhost:8000/docs
+- Docker logs: `docker-compose logs -f`
+- GitHub issues (if repository is public)

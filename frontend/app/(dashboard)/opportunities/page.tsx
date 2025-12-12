@@ -1,265 +1,378 @@
-"use client";
+'use client'
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import Link from "next/link";
-import api from "@/lib/api";
-import { formatDate, getDaysUntil } from "@/lib/utils";
-import type { OpportunityWithEvaluation } from "@/types";
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { useAuth } from '@/hooks/useAuth'
+import { getEvaluations, getStats } from '@/lib/opportunities'
+import { EvaluationWithOpportunity, OpportunityStats } from '@/types/opportunity'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
 export default function OpportunitiesPage() {
-  const router = useRouter();
-  const [opportunities, setOpportunities] = useState<OpportunityWithEvaluation[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-
-  // Filters
-  const [filters, setFilters] = useState({
-    set_aside: "",
-    agency: "",
-    min_score: "",
-    sort_by: "fit_score",
-  });
+  const { user, loading } = useAuth()
+  const router = useRouter()
+  const [evaluations, setEvaluations] = useState<EvaluationWithOpportunity[]>([])
+  const [stats, setStats] = useState<OpportunityStats | null>(null)
+  const [loadingData, setLoadingData] = useState(true)
+  const [filter, setFilter] = useState<'ALL' | 'BID' | 'NO_BID' | 'RESEARCH'>('ALL')
+  const [minFitScore, setMinFitScore] = useState<number>(0)
+  const [page, setPage] = useState(0)
+  const [total, setTotal] = useState(0)
+  const limit = 20
 
   useEffect(() => {
-    fetchOpportunities();
-  }, [page, filters]);
-
-  const fetchOpportunities = async () => {
-    const token = localStorage.getItem("token");
-    if (!token) {
-      router.push("/login");
-      return;
+    if (!loading && !user) {
+      router.push('/login')
     }
+  }, [user, loading, router])
 
-    setLoading(true);
+  useEffect(() => {
+    loadData()
+  }, [filter, minFitScore, page, user])
+
+  const loadData = async () => {
+    if (!user) return
+
     try {
-      const response: any = await api.opportunities.list(token, {
-        page,
-        page_size: 20,
-        ...filters,
-      });
+      setLoadingData(true)
 
-      setOpportunities(response.items || []);
-      setTotalPages(response.pages || 1);
+      // Load evaluations
+      const params: any = {
+        skip: page * limit,
+        limit,
+      }
+
+      if (filter !== 'ALL') {
+        params.recommendation = filter
+      }
+
+      if (minFitScore > 0) {
+        params.min_fit_score = minFitScore
+      }
+
+      const evalResponse = await getEvaluations(params)
+      setEvaluations(evalResponse.evaluations)
+      setTotal(evalResponse.total)
+
+      // Load stats
+      const statsData = await getStats()
+      setStats(statsData)
     } catch (error) {
-      console.error("Error fetching opportunities:", error);
+      console.error('Error loading opportunities:', error)
     } finally {
-      setLoading(false);
+      setLoadingData(false)
     }
-  };
+  }
 
-  const handleSave = async (oppId: string) => {
-    const token = localStorage.getItem("token");
-    if (!token) return;
+  if (loading || loadingData) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    )
+  }
 
-    try {
-      await api.opportunities.save(token, oppId);
-      alert("Opportunity saved to pipeline!");
-    } catch (error: any) {
-      alert(error.message || "Failed to save");
+  const getRecommendationColor = (rec: string) => {
+    switch (rec) {
+      case 'BID':
+        return 'bg-green-100 text-green-800'
+      case 'NO_BID':
+        return 'bg-red-100 text-red-800'
+      case 'RESEARCH':
+        return 'bg-yellow-100 text-yellow-800'
+      default:
+        return 'bg-gray-100 text-gray-800'
     }
-  };
+  }
 
-  const handleDismiss = async (oppId: string) => {
-    const token = localStorage.getItem("token");
-    if (!token) return;
+  const getScoreColor = (score: number) => {
+    if (score >= 80) return 'text-green-600'
+    if (score >= 60) return 'text-yellow-600'
+    return 'text-red-600'
+  }
 
-    try {
-      await api.opportunities.dismiss(token, oppId);
-      setOpportunities(opportunities.filter((o) => o.id !== oppId));
-    } catch (error: any) {
-      alert(error.message || "Failed to dismiss");
-    }
-  };
+  const formatDate = (dateStr?: string) => {
+    if (!dateStr) return 'N/A'
+    return new Date(dateStr).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    })
+  }
 
-  const getScoreBadgeColor = (score: number) => {
-    if (score >= 75) return "bg-green-100 text-green-800";
-    if (score >= 50) return "bg-yellow-100 text-yellow-800";
-    return "bg-red-100 text-red-800";
-  };
+  const formatCurrency = (value?: number) => {
+    if (!value) return 'N/A'
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(value)
+  }
 
   return (
-    <div>
-      <h1 className="text-3xl font-bold mb-8">Opportunities</h1>
-
-      {/* Filters */}
-      <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Set-Aside
-            </label>
-            <select
-              value={filters.set_aside}
-              onChange={(e) => setFilters({ ...filters, set_aside: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md"
-            >
-              <option value="">All</option>
-              <option value="8(a)">8(a)</option>
-              <option value="WOSB">WOSB</option>
-              <option value="SDVOSB">SDVOSB</option>
-              <option value="HUBZone">HUBZone</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Agency
-            </label>
-            <input
-              type="text"
-              value={filters.agency}
-              onChange={(e) => setFilters({ ...filters, agency: e.target.value })}
-              placeholder="Search agency..."
-              className="w-full px-3 py-2 border border-gray-300 rounded-md"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Min Score
-            </label>
-            <input
-              type="number"
-              value={filters.min_score}
-              onChange={(e) => setFilters({ ...filters, min_score: e.target.value })}
-              placeholder="0-100"
-              min="0"
-              max="100"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Sort By
-            </label>
-            <select
-              value={filters.sort_by}
-              onChange={(e) => setFilters({ ...filters, sort_by: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md"
-            >
-              <option value="fit_score">Fit Score</option>
-              <option value="deadline">Deadline</option>
-              <option value="posted_date">Posted Date</option>
-            </select>
-          </div>
-        </div>
-      </div>
-
-      {/* Results */}
-      {loading ? (
-        <div className="flex items-center justify-center h-96">
-          <div className="text-gray-500">Loading...</div>
-        </div>
-      ) : (
-        <>
-          <div className="bg-white rounded-lg shadow-sm divide-y divide-gray-200">
-            {opportunities.length === 0 ? (
-              <div className="p-12 text-center text-gray-500">
-                No opportunities found matching your filters.
+    <div className="min-h-screen bg-gray-50">
+      {/* Navigation */}
+      <nav className="bg-white border-b border-gray-200">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between h-16">
+            <div className="flex items-center gap-6">
+              <h1 className="text-2xl font-bold text-gray-900">GovAI</h1>
+              <div className="flex gap-4">
+                <Button variant="ghost" onClick={() => router.push('/dashboard')}>
+                  Dashboard
+                </Button>
+                <Button variant="ghost" className="text-blue-600">
+                  Opportunities
+                </Button>
+                <Button variant="ghost" onClick={() => router.push('/pipeline')}>
+                  Pipeline
+                </Button>
+                <Button variant="ghost" onClick={() => router.push('/settings')}>
+                  Settings
+                </Button>
               </div>
-            ) : (
-              opportunities.map((opp) => (
-                <div key={opp.id} className="p-6">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <Link
-                        href={`/opportunities/${opp.id}`}
-                        className="block hover:text-blue-600"
-                      >
-                        <div className="flex items-center gap-3 mb-2">
-                          {opp.evaluation && (
-                            <span
-                              className={`px-3 py-1 rounded-full text-sm font-semibold ${getScoreBadgeColor(
-                                opp.evaluation.fit_score
-                              )}`}
-                            >
-                              {opp.evaluation.fit_score}
-                            </span>
-                          )}
-                          <h3 className="font-semibold text-lg">{opp.title}</h3>
-                        </div>
-                      </Link>
+            </div>
+            <div className="flex items-center gap-4">
+              <span className="text-sm text-gray-700">{user?.email}</span>
+            </div>
+          </div>
+        </div>
+      </nav>
 
-                      <div className="flex items-center gap-4 text-sm text-gray-600 mb-3">
-                        <span className="font-medium">{opp.agency}</span>
-                        {opp.set_aside_type && (
-                          <span className="bg-blue-100 text-blue-800 px-2 py-0.5 rounded">
-                            {opp.set_aside_type}
-                          </span>
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Header */}
+        <div className="mb-8">
+          <h2 className="text-3xl font-bold text-gray-900 mb-2">Contract Opportunities</h2>
+          <p className="text-gray-600">
+            AI-evaluated opportunities matched to your company profile
+          </p>
+        </div>
+
+        {/* Stats Cards */}
+        {stats && (
+          <div className="grid md:grid-cols-4 gap-4 mb-8">
+            <Card>
+              <CardHeader className="pb-3">
+                <CardDescription>Total Evaluated</CardDescription>
+                <CardTitle className="text-3xl">{stats.total_evaluations}</CardTitle>
+              </CardHeader>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-3">
+                <CardDescription>BID Recommendations</CardDescription>
+                <CardTitle className="text-3xl text-green-600">{stats.bid_recommendations}</CardTitle>
+              </CardHeader>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-3">
+                <CardDescription>Avg Fit Score</CardDescription>
+                <CardTitle className="text-3xl text-blue-600">
+                  {stats.avg_fit_score ? `${stats.avg_fit_score.toFixed(0)}%` : 'N/A'}
+                </CardTitle>
+              </CardHeader>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-3">
+                <CardDescription>Avg Win Probability</CardDescription>
+                <CardTitle className="text-3xl text-purple-600">
+                  {stats.avg_win_probability ? `${stats.avg_win_probability.toFixed(0)}%` : 'N/A'}
+                </CardTitle>
+              </CardHeader>
+            </Card>
+          </div>
+        )}
+
+        {/* Filters */}
+        <Card className="mb-6">
+          <CardContent className="pt-6">
+            <div className="flex gap-4 flex-wrap">
+              <div className="flex-1 min-w-[200px]">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Recommendation
+                </label>
+                <Select value={filter} onValueChange={(v: any) => setFilter(v)}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ALL">All Recommendations</SelectItem>
+                    <SelectItem value="BID">BID</SelectItem>
+                    <SelectItem value="RESEARCH">RESEARCH</SelectItem>
+                    <SelectItem value="NO_BID">NO_BID</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="flex-1 min-w-[200px]">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Min Fit Score
+                </label>
+                <Select value={minFitScore.toString()} onValueChange={(v) => setMinFitScore(Number(v))}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="0">Any Score</SelectItem>
+                    <SelectItem value="50">50% and above</SelectItem>
+                    <SelectItem value="60">60% and above</SelectItem>
+                    <SelectItem value="70">70% and above</SelectItem>
+                    <SelectItem value="80">80% and above</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="flex items-end">
+                <Button onClick={loadData} variant="outline">
+                  Refresh
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Opportunities List */}
+        {evaluations.length === 0 ? (
+          <Card>
+            <CardContent className="pt-6 text-center py-12">
+              <p className="text-gray-500 mb-4">No opportunities found</p>
+              <p className="text-sm text-gray-400">
+                The AI will automatically discover and evaluate opportunities every 15 minutes
+              </p>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="space-y-4">
+            {evaluations.map((evaluation) => (
+              <Card
+                key={evaluation.id}
+                className="hover:shadow-lg transition-shadow cursor-pointer"
+                onClick={() => router.push(`/opportunities/${evaluation.opportunity.id}`)}
+              >
+                <CardContent className="pt-6">
+                  <div className="flex gap-6">
+                    {/* Left: Scores */}
+                    <div className="flex-shrink-0 w-32 space-y-3">
+                      <div>
+                        <div className="text-xs text-gray-500 mb-1">Fit Score</div>
+                        <div className={`text-3xl font-bold ${getScoreColor(evaluation.fit_score)}`}>
+                          {evaluation.fit_score}%
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-xs text-gray-500 mb-1">Win Prob</div>
+                        <div className={`text-2xl font-semibold ${getScoreColor(evaluation.win_probability)}`}>
+                          {evaluation.win_probability}%
+                        </div>
+                      </div>
+                      <Badge className={getRecommendationColor(evaluation.recommendation)}>
+                        {evaluation.recommendation}
+                      </Badge>
+                    </div>
+
+                    {/* Middle: Details */}
+                    <div className="flex-1">
+                      <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                        {evaluation.opportunity.title}
+                      </h3>
+
+                      <div className="flex gap-4 text-sm text-gray-600 mb-3">
+                        {evaluation.opportunity.department && (
+                          <span>🏛️ {evaluation.opportunity.department}</span>
                         )}
-                        <span>NAICS: {opp.naics_code}</span>
-                        {opp.response_deadline && (
-                          <span className="text-red-600 font-medium">
-                            Due: {formatDate(opp.response_deadline)} (
-                            {getDaysUntil(opp.response_deadline)} days)
-                          </span>
+                        {evaluation.opportunity.naics_code && (
+                          <span>📊 NAICS {evaluation.opportunity.naics_code}</span>
+                        )}
+                        {evaluation.opportunity.set_aside && (
+                          <span>🎯 {evaluation.opportunity.set_aside}</span>
                         )}
                       </div>
 
-                      {opp.evaluation && (
-                        <div className="text-sm text-gray-700">
-                          <span className="font-medium">
-                            {opp.evaluation.recommendation}:
-                          </span>{" "}
-                          {opp.evaluation.executive_summary}
+                      <p className="text-sm text-gray-600 mb-3 line-clamp-2">
+                        {evaluation.opportunity.description}
+                      </p>
+
+                      {evaluation.strengths && evaluation.strengths.length > 0 && (
+                        <div className="mb-2">
+                          <span className="text-xs font-medium text-green-600">Strengths: </span>
+                          <span className="text-xs text-gray-600">
+                            {evaluation.strengths.slice(0, 2).join(' • ')}
+                            {evaluation.strengths.length > 2 && ` +${evaluation.strengths.length - 2} more`}
+                          </span>
+                        </div>
+                      )}
+
+                      {evaluation.weaknesses && evaluation.weaknesses.length > 0 && (
+                        <div>
+                          <span className="text-xs font-medium text-red-600">Weaknesses: </span>
+                          <span className="text-xs text-gray-600">
+                            {evaluation.weaknesses.slice(0, 2).join(' • ')}
+                            {evaluation.weaknesses.length > 2 && ` +${evaluation.weaknesses.length - 2} more`}
+                          </span>
                         </div>
                       )}
                     </div>
 
-                    <div className="ml-4 flex gap-2">
-                      <button
-                        onClick={() => handleDismiss(opp.id)}
-                        className="px-4 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-50"
-                      >
-                        Dismiss
-                      </button>
-                      <button
-                        onClick={() => handleSave(opp.id)}
-                        className="px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700"
-                      >
-                        Save
-                      </button>
-                      <Link
-                        href={`/opportunities/${opp.id}`}
-                        className="px-4 py-2 text-sm bg-white text-blue-600 border border-blue-600 rounded-md hover:bg-blue-50"
-                      >
-                        View →
-                      </Link>
+                    {/* Right: Metadata */}
+                    <div className="flex-shrink-0 w-48 text-sm">
+                      <div className="space-y-2">
+                        <div>
+                          <div className="text-xs text-gray-500">Deadline</div>
+                          <div className="font-medium">
+                            {formatDate(evaluation.opportunity.response_deadline)}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-xs text-gray-500">Location</div>
+                          <div>
+                            {evaluation.opportunity.place_of_performance_city}, {evaluation.opportunity.place_of_performance_state || 'N/A'}
+                          </div>
+                        </div>
+                        {evaluation.opportunity.contract_value && (
+                          <div>
+                            <div className="text-xs text-gray-500">Contract Value</div>
+                            <div className="font-medium">
+                              {formatCurrency(evaluation.opportunity.contract_value)}
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))
-            )}
+                </CardContent>
+              </Card>
+            ))}
           </div>
+        )}
 
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="mt-6 flex justify-center gap-2">
-              <button
-                onClick={() => setPage(Math.max(1, page - 1))}
-                disabled={page === 1}
-                className="px-4 py-2 border border-gray-300 rounded-md disabled:opacity-50"
-              >
-                Previous
-              </button>
-              <span className="px-4 py-2">
-                Page {page} of {totalPages}
-              </span>
-              <button
-                onClick={() => setPage(Math.min(totalPages, page + 1))}
-                disabled={page === totalPages}
-                className="px-4 py-2 border border-gray-300 rounded-md disabled:opacity-50"
-              >
-                Next
-              </button>
-            </div>
-          )}
-        </>
-      )}
+        {/* Pagination */}
+        {total > limit && (
+          <div className="mt-6 flex justify-center gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setPage(p => Math.max(0, p - 1))}
+              disabled={page === 0}
+            >
+              Previous
+            </Button>
+            <span className="flex items-center px-4 text-sm text-gray-600">
+              Page {page + 1} of {Math.ceil(total / limit)}
+            </span>
+            <Button
+              variant="outline"
+              onClick={() => setPage(p => p + 1)}
+              disabled={(page + 1) * limit >= total}
+            >
+              Next
+            </Button>
+          </div>
+        )}
+      </main>
     </div>
-  );
+  )
 }

@@ -1,246 +1,312 @@
+"""
+Opportunity and Evaluation CRUD service
+"""
+from typing import List, Optional, Dict
 from sqlalchemy.orm import Session
-from sqlalchemy import desc, asc, and_, or_
-from fastapi import HTTPException, status
-from typing import List, Optional, Tuple
+from sqlalchemy import and_, or_, desc
+from app.models.opportunity import Opportunity
+from app.models.evaluation import Evaluation
+from app.models.company import Company
 from datetime import datetime, timedelta
-import math
-from ..models.opportunity import Opportunity
-from ..models.evaluation import Evaluation
-from ..models.saved_opportunity import SavedOpportunity, DismissedOpportunity
-from ..models.user import User
-from ..schemas.opportunity import OpportunityFilter
+import logging
+
+logger = logging.getLogger(__name__)
 
 
-def get_opportunities_for_user(
-    db: Session,
-    user: User,
-    filters: OpportunityFilter
-) -> Tuple[List[dict], int]:
-    """Get paginated opportunities with evaluations for a user"""
+class OpportunityService:
+    """Service for managing opportunities and evaluations"""
 
-    # Base query - get opportunities that match user's company profile
-    query = db.query(Opportunity).filter(Opportunity.status == "active")
+    def create_opportunity(self, db: Session, opportunity_data: Dict) -> Opportunity:
+        """
+        Create a new opportunity
 
-    # Filter by user's company NAICS codes if they have a company
-    if user.company and user.company.naics_codes:
-        query = query.filter(Opportunity.naics_code.in_(user.company.naics_codes))
+        Args:
+            db: Database session
+            opportunity_data: Dict with opportunity fields
 
-    # Filter by user's company set-asides (include opportunities with no set-aside)
-    if user.company and user.company.set_asides:
-        # Include opportunities that match company set-asides OR have no set-aside (open to all)
-        query = query.filter(
-            or_(
-                Opportunity.set_aside_type.in_(user.company.set_asides),
-                Opportunity.set_aside_type.is_(None),
-                Opportunity.set_aside_type == '',
-                Opportunity.set_aside_type == 'NONE'
-            )
-        )
+        Returns:
+            Created Opportunity instance
+        """
+        # Check if opportunity already exists
+        existing = db.query(Opportunity).filter(
+            Opportunity.notice_id == opportunity_data.get("notice_id")
+        ).first()
 
-    # Exclude dismissed opportunities
-    dismissed_ids = db.query(DismissedOpportunity.opportunity_id).filter(
-        DismissedOpportunity.user_id == user.id
-    ).all()
-    dismissed_ids = [d[0] for d in dismissed_ids]
-    if dismissed_ids:
-        query = query.filter(~Opportunity.id.in_(dismissed_ids))
+        if existing:
+            logger.info(f"Opportunity {opportunity_data.get('notice_id')} already exists, updating...")
+            return self.update_opportunity(db, existing.id, opportunity_data)
 
-    # Apply filters
-    if filters.set_aside:
-        query = query.filter(Opportunity.set_aside_type == filters.set_aside)
+        opportunity = Opportunity(**opportunity_data)
+        db.add(opportunity)
+        db.commit()
+        db.refresh(opportunity)
 
-    if filters.agency:
-        query = query.filter(Opportunity.agency.ilike(f"%{filters.agency}%"))
+        logger.info(f"Created opportunity {opportunity.notice_id}")
+        return opportunity
 
-    if filters.naics_code:
-        query = query.filter(Opportunity.naics_code == filters.naics_code)
+    def update_opportunity(self, db: Session, opportunity_id: str, opportunity_data: Dict) -> Opportunity:
+        """
+        Update an existing opportunity
 
-    # Get total count
-    total = query.count()
+        Args:
+            db: Database session
+            opportunity_id: ID of opportunity to update
+            opportunity_data: Dict with fields to update
 
-    # Join with evaluations if filtering by score
-    if filters.min_score:
-        query = query.join(Evaluation).filter(
+        Returns:
+            Updated Opportunity instance
+        """
+        opportunity = db.query(Opportunity).filter(Opportunity.id == opportunity_id).first()
+        if not opportunity:
+            raise ValueError(f"Opportunity {opportunity_id} not found")
+
+        # Update fields
+        for key, value in opportunity_data.items():
+            if hasattr(opportunity, key):
+                setattr(opportunity, key, value)
+
+        opportunity.updated_at = datetime.utcnow()
+        db.commit()
+        db.refresh(opportunity)
+
+        logger.info(f"Updated opportunity {opportunity.notice_id}")
+        return opportunity
+
+    def get_opportunity_by_id(self, db: Session, opportunity_id: str) -> Optional[Opportunity]:
+        """Get opportunity by ID"""
+        return db.query(Opportunity).filter(Opportunity.id == opportunity_id).first()
+
+    def get_opportunity_by_notice_id(self, db: Session, notice_id: str) -> Optional[Opportunity]:
+        """Get opportunity by SAM.gov notice ID"""
+        return db.query(Opportunity).filter(Opportunity.notice_id == notice_id).first()
+
+    def list_opportunities(
+        self,
+        db: Session,
+        skip: int = 0,
+        limit: int = 100,
+        active_only: bool = True,
+        naics_codes: Optional[List[str]] = None,
+        deadline_after: Optional[datetime] = None
+    ) -> List[Opportunity]:
+        """
+        List opportunities with optional filters
+
+        Args:
+            db: Database session
+            skip: Number of records to skip (pagination)
+            limit: Max number of records to return
+            active_only: Only return active opportunities
+            naics_codes: Filter by NAICS codes
+            deadline_after: Only opportunities with deadline after this date
+
+        Returns:
+            List of Opportunity instances
+        """
+        query = db.query(Opportunity)
+
+        # Apply filters
+        if active_only:
+            query = query.filter(Opportunity.is_active == True)
+
+        if naics_codes:
+            query = query.filter(Opportunity.naics_code.in_(naics_codes))
+
+        if deadline_after:
+            query = query.filter(Opportunity.response_deadline >= deadline_after)
+
+        # Order by most recent first
+        query = query.order_by(desc(Opportunity.posted_date))
+
+        return query.offset(skip).limit(limit).all()
+
+    def create_evaluation(self, db: Session, evaluation_data: Dict) -> Evaluation:
+        """
+        Create a new evaluation
+
+        Args:
+            db: Database session
+            evaluation_data: Dict with evaluation fields
+
+        Returns:
+            Created Evaluation instance
+        """
+        # Check if evaluation already exists for this opportunity + company
+        existing = db.query(Evaluation).filter(
             and_(
-                Evaluation.company_id == user.company_id,
-                Evaluation.fit_score >= filters.min_score
-            )
-        )
-
-    # Sorting
-    if filters.sort_by == "fit_score":
-        # Join with evaluations for sorting
-        query = query.outerjoin(Evaluation, and_(
-            Evaluation.opportunity_id == Opportunity.id,
-            Evaluation.company_id == user.company_id
-        ))
-        if filters.sort_order == "desc":
-            query = query.order_by(desc(Evaluation.fit_score))
-        else:
-            query = query.order_by(asc(Evaluation.fit_score))
-    elif filters.sort_by == "deadline":
-        if filters.sort_order == "desc":
-            query = query.order_by(desc(Opportunity.response_deadline))
-        else:
-            query = query.order_by(asc(Opportunity.response_deadline))
-    elif filters.sort_by == "posted_date":
-        if filters.sort_order == "desc":
-            query = query.order_by(desc(Opportunity.posted_date))
-        else:
-            query = query.order_by(asc(Opportunity.posted_date))
-
-    # Pagination
-    offset = (filters.page - 1) * filters.page_size
-    opportunities = query.offset(offset).limit(filters.page_size).all()
-
-    # Attach evaluations
-    results = []
-    for opp in opportunities:
-        evaluation = db.query(Evaluation).filter(
-            and_(
-                Evaluation.opportunity_id == opp.id,
-                Evaluation.company_id == user.company_id
+                Evaluation.opportunity_id == evaluation_data.get("opportunity_id"),
+                Evaluation.company_id == evaluation_data.get("company_id")
             )
         ).first()
 
-        results.append({
-            **opp.__dict__,
-            "evaluation": evaluation
-        })
+        if existing:
+            logger.info(
+                f"Evaluation for opportunity {evaluation_data.get('opportunity_id')} "
+                f"and company {evaluation_data.get('company_id')} already exists, updating..."
+            )
+            return self.update_evaluation(db, existing.id, evaluation_data)
 
-    return results, total
+        evaluation = Evaluation(**evaluation_data)
+        db.add(evaluation)
+        db.commit()
+        db.refresh(evaluation)
 
-
-def save_opportunity(db: Session, user_id: str, opportunity_id: str, status: str = "watching") -> SavedOpportunity:
-    """Save an opportunity to user's pipeline"""
-    # Check if already saved
-    existing = db.query(SavedOpportunity).filter(
-        and_(
-            SavedOpportunity.user_id == user_id,
-            SavedOpportunity.opportunity_id == opportunity_id
+        logger.info(
+            f"Created evaluation for opportunity {evaluation.opportunity_id}, "
+            f"company {evaluation.company_id}: {evaluation.recommendation}"
         )
-    ).first()
+        return evaluation
 
-    if existing:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Opportunity already saved"
-        )
+    def update_evaluation(self, db: Session, evaluation_id: str, evaluation_data: Dict) -> Evaluation:
+        """
+        Update an existing evaluation
 
-    saved = SavedOpportunity(
-        user_id=user_id,
-        opportunity_id=opportunity_id,
-        status=status
-    )
+        Args:
+            db: Database session
+            evaluation_id: ID of evaluation to update
+            evaluation_data: Dict with fields to update
 
-    db.add(saved)
-    db.commit()
-    db.refresh(saved)
+        Returns:
+            Updated Evaluation instance
+        """
+        evaluation = db.query(Evaluation).filter(Evaluation.id == evaluation_id).first()
+        if not evaluation:
+            raise ValueError(f"Evaluation {evaluation_id} not found")
 
-    return saved
+        # Update fields
+        for key, value in evaluation_data.items():
+            if hasattr(evaluation, key):
+                setattr(evaluation, key, value)
+
+        evaluation.updated_at = datetime.utcnow()
+        db.commit()
+        db.refresh(evaluation)
+
+        logger.info(f"Updated evaluation {evaluation.id}")
+        return evaluation
+
+    def get_evaluation_by_id(self, db: Session, evaluation_id: str) -> Optional[Evaluation]:
+        """Get evaluation by ID"""
+        return db.query(Evaluation).filter(Evaluation.id == evaluation_id).first()
+
+    def get_evaluation_for_opportunity(
+        self,
+        db: Session,
+        opportunity_id: str,
+        company_id: str
+    ) -> Optional[Evaluation]:
+        """Get evaluation for a specific opportunity and company"""
+        return db.query(Evaluation).filter(
+            and_(
+                Evaluation.opportunity_id == opportunity_id,
+                Evaluation.company_id == company_id
+            )
+        ).first()
+
+    def list_evaluations_for_company(
+        self,
+        db: Session,
+        company_id: str,
+        skip: int = 0,
+        limit: int = 100,
+        recommendation: Optional[str] = None,
+        min_fit_score: Optional[float] = None
+    ) -> List[Evaluation]:
+        """
+        List evaluations for a company
+
+        Args:
+            db: Database session
+            company_id: Company ID
+            skip: Number of records to skip (pagination)
+            limit: Max number of records to return
+            recommendation: Filter by recommendation (BID, NO_BID, RESEARCH)
+            min_fit_score: Minimum fit score
+
+        Returns:
+            List of Evaluation instances
+        """
+        query = db.query(Evaluation).filter(Evaluation.company_id == company_id)
+
+        # Apply filters
+        if recommendation:
+            query = query.filter(Evaluation.recommendation == recommendation)
+
+        if min_fit_score is not None:
+            query = query.filter(Evaluation.fit_score >= min_fit_score)
+
+        # Order by fit score descending
+        query = query.order_by(desc(Evaluation.fit_score))
+
+        return query.offset(skip).limit(limit).all()
+
+    def get_opportunities_needing_evaluation(
+        self,
+        db: Session,
+        company_id: str,
+        limit: int = 50
+    ) -> List[Opportunity]:
+        """
+        Get opportunities that match company's NAICS codes but haven't been evaluated yet
+
+        Args:
+            db: Database session
+            company_id: Company ID
+            limit: Max number of opportunities to return
+
+        Returns:
+            List of Opportunity instances
+        """
+        # Get company
+        company = db.query(Company).filter(Company.id == company_id).first()
+        if not company or not company.naics_codes:
+            return []
+
+        # Get all opportunity IDs that already have evaluations for this company
+        evaluated_opp_ids = db.query(Evaluation.opportunity_id).filter(
+            Evaluation.company_id == company_id
+        ).all()
+        evaluated_opp_ids = [opp_id[0] for opp_id in evaluated_opp_ids]
+
+        # Get active opportunities matching company's NAICS codes that haven't been evaluated
+        query = db.query(Opportunity).filter(
+            and_(
+                Opportunity.is_active == True,
+                Opportunity.naics_code.in_(company.naics_codes),
+                Opportunity.response_deadline >= datetime.utcnow(),
+                Opportunity.id.notin_(evaluated_opp_ids)
+            )
+        ).order_by(desc(Opportunity.posted_date))
+
+        return query.limit(limit).all()
+
+    def delete_old_opportunities(self, db: Session, days_old: int = 90) -> int:
+        """
+        Delete opportunities older than specified days
+
+        Args:
+            db: Database session
+            days_old: Delete opportunities older than this many days
+
+        Returns:
+            Number of opportunities deleted
+        """
+        cutoff_date = datetime.utcnow() - timedelta(days=days_old)
+
+        count = db.query(Opportunity).filter(
+            or_(
+                Opportunity.archive_date < cutoff_date,
+                and_(
+                    Opportunity.response_deadline < cutoff_date,
+                    Opportunity.archive_date.is_(None)
+                )
+            )
+        ).delete()
+
+        db.commit()
+        logger.info(f"Deleted {count} old opportunities (older than {days_old} days)")
+        return count
 
 
-def dismiss_opportunity(db: Session, user_id: str, opportunity_id: str) -> DismissedOpportunity:
-    """Dismiss an opportunity"""
-    # Check if already dismissed
-    existing = db.query(DismissedOpportunity).filter(
-        and_(
-            DismissedOpportunity.user_id == user_id,
-            DismissedOpportunity.opportunity_id == opportunity_id
-        )
-    ).first()
-
-    if existing:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Opportunity already dismissed"
-        )
-
-    dismissed = DismissedOpportunity(
-        user_id=user_id,
-        opportunity_id=opportunity_id
-    )
-
-    db.add(dismissed)
-    db.commit()
-    db.refresh(dismissed)
-
-    return dismissed
-
-
-def get_pipeline_opportunities(db: Session, user_id: str, status: Optional[str] = None) -> List[dict]:
-    """Get user's saved opportunities"""
-    query = db.query(SavedOpportunity).filter(SavedOpportunity.user_id == user_id)
-
-    if status:
-        query = query.filter(SavedOpportunity.status == status)
-
-    saved_opps = query.all()
-
-    results = []
-    for saved in saved_opps:
-        opportunity = db.query(Opportunity).filter(Opportunity.id == saved.opportunity_id).first()
-        if opportunity:
-            evaluation = db.query(Evaluation).filter(
-                Evaluation.opportunity_id == opportunity.id
-            ).first()
-
-            results.append({
-                "saved": saved,
-                "opportunity": opportunity,
-                "evaluation": evaluation
-            })
-
-    return results
-
-
-def get_pipeline_stats(db: Session, user_id: str) -> dict:
-    """Get pipeline statistics"""
-    saved_opps = db.query(SavedOpportunity).filter(SavedOpportunity.user_id == user_id).all()
-
-    stats = {
-        "watching": 0,
-        "pursuing": 0,
-        "submitted": 0,
-        "won": 0,
-        "lost": 0,
-        "total": len(saved_opps)
-    }
-
-    for opp in saved_opps:
-        if opp.status in stats:
-            stats[opp.status] += 1
-
-    return stats
-
-
-def get_upcoming_deadlines(db: Session, user_id: str, days: int = 14) -> List[dict]:
-    """Get upcoming deadlines for saved opportunities"""
-    deadline_date = datetime.utcnow() + timedelta(days=days)
-
-    saved_opps = db.query(SavedOpportunity).filter(SavedOpportunity.user_id == user_id).all()
-    opp_ids = [s.opportunity_id for s in saved_opps]
-
-    opportunities = db.query(Opportunity).filter(
-        and_(
-            Opportunity.id.in_(opp_ids),
-            Opportunity.response_deadline.isnot(None),
-            Opportunity.response_deadline <= deadline_date,
-            Opportunity.response_deadline >= datetime.utcnow()
-        )
-    ).order_by(asc(Opportunity.response_deadline)).all()
-
-    results = []
-    for opp in opportunities:
-        days_remaining = (opp.response_deadline - datetime.utcnow()).days
-        saved = next((s for s in saved_opps if s.opportunity_id == opp.id), None)
-
-        results.append({
-            "opportunity_id": opp.id,
-            "title": opp.title,
-            "response_deadline": opp.response_deadline,
-            "days_remaining": days_remaining,
-            "status": saved.status if saved else "unknown"
-        })
-
-    return results
+# Singleton instance
+opportunity_service = OpportunityService()

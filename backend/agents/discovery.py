@@ -1,209 +1,209 @@
-"""SAM.gov Discovery Agent - Polls for new opportunities"""
-import requests
-from sqlalchemy.orm import Session
-from datetime import datetime, timedelta
-from typing import List, Dict
-from app.core.config import settings
-from app.core.database import SessionLocal
-from app.models.opportunity import Opportunity
-from app.models.company import Company
+"""
+Discovery Agent - SAM.gov Polling Agent
+
+This agent is responsible for:
+- Polling SAM.gov API for new government contract opportunities
+- Matching opportunities to company NAICS codes
+- Creating new opportunity records in the database
+- Triggering AI evaluation for matched opportunities
+"""
+
+from typing import List, Dict, Optional
+from datetime import datetime
+import asyncio
 import logging
-import time
+
+from app.core.database import SessionLocal
+from app.models.company import Company
+from app.models.opportunity import Opportunity
+from app.services.sam_gov import sam_gov_service
+from app.services.opportunity import opportunity_service
 
 logger = logging.getLogger(__name__)
 
 
 class DiscoveryAgent:
-    """Agent for discovering government contract opportunities from SAM.gov"""
+    """
+    Agent for automated discovery of government contract opportunities.
 
-    def __init__(self):
-        self.api_key = settings.SAM_API_KEY
-        self.base_url = settings.SAM_API_BASE_URL
+    This agent runs on a schedule (every 15 minutes via Celery Beat) to:
+    1. Collect NAICS codes from all registered companies
+    2. Search SAM.gov for matching opportunities
+    3. Parse and store new opportunities
+    4. Track discovery statistics
+    """
 
-    def fetch_opportunities(self, params: dict, max_retries: int = 2) -> List[Dict]:
-        """Fetch opportunities from SAM.gov API with retry logic"""
-        headers = {
-            "X-Api-Key": self.api_key,
-            "Content-Type": "application/json"
-        }
+    def __init__(self, db_session=None):
+        """
+        Initialize the Discovery Agent.
 
-        for attempt in range(max_retries):
-            try:
-                response = requests.get(
-                    self.base_url,
-                    headers=headers,
-                    params=params,
-                    timeout=90
-                )
+        Args:
+            db_session: Optional SQLAlchemy session. If not provided,
+                       a new session will be created.
+        """
+        self.db = db_session
+        self._owns_session = db_session is None
 
-                # Handle rate limiting specifically
-                if response.status_code == 429:
-                    if attempt == 0:
-                        logger.error(f"Rate limited (429) on first attempt. You may have hit SAM.gov's daily rate limit. Please try again later or contact SAM.gov for higher limits.")
-                        return []
+    def __enter__(self):
+        if self._owns_session:
+            self.db = SessionLocal()
+        return self
 
-                    wait_time = (attempt + 1) * 15  # 15, 30 seconds
-                    logger.warning(f"Rate limited (429). Waiting {wait_time}s before retry {attempt + 1}/{max_retries}")
-                    time.sleep(wait_time)
-                    continue
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if self._owns_session and self.db:
+            self.db.close()
 
-                response.raise_for_status()
-                data = response.json()
-                logger.info(f"Successfully fetched {len(data.get('opportunitiesData', []))} opportunities")
-                return data.get("opportunitiesData", [])
+    def get_all_company_naics_codes(self) -> List[str]:
+        """
+        Collect all unique NAICS codes from registered companies.
 
-            except requests.exceptions.RequestException as e:
-                if attempt < max_retries - 1:
-                    wait_time = (attempt + 1) * 5
-                    logger.warning(f"Request failed: {e}. Retrying in {wait_time}s...")
-                    time.sleep(wait_time)
-                else:
-                    logger.error(f"Error fetching from SAM.gov after {max_retries} attempts: {e}")
-                    return []
+        Returns:
+            List of unique NAICS code strings
+        """
+        companies = self.db.query(Company).filter(
+            Company.naics_codes.isnot(None)
+        ).all()
 
-        logger.error("Failed to fetch opportunities after all retry attempts")
-        return []
-
-    def poll_new_opportunities(self, db: Session, hours_back: int = 24):
-        """Poll for new opportunities posted in the last N hours"""
-        # Calculate date range
-        end_date = datetime.utcnow()
-        start_date = end_date - timedelta(hours=hours_back)
-
-        # Get all companies to match their NAICS codes
-        companies = db.query(Company).all()
-
-        if not companies:
-            logger.info("No companies found, skipping discovery")
-            return
-
-        # Collect all unique NAICS codes
         all_naics = set()
         for company in companies:
             if company.naics_codes:
                 all_naics.update(company.naics_codes)
 
-        # Fetch opportunities for each NAICS code
-        new_count = 0
-        naics_list = list(all_naics)
-        total_naics = len(naics_list)
+        logger.info(f"Collected {len(all_naics)} unique NAICS codes from {len(companies)} companies")
+        return list(all_naics)
 
-        for idx, naics_code in enumerate(naics_list, 1):
-            logger.info(f"Processing NAICS {naics_code} ({idx}/{total_naics})")
+    def get_companies_for_naics(self, naics_code: str) -> List[Company]:
+        """
+        Get all companies that have a specific NAICS code.
 
-            params = {
-                "postedFrom": start_date.strftime("%m/%d/%Y"),
-                "postedTo": end_date.strftime("%m/%d/%Y"),
-                "ncode": naics_code,
-                "limit": 100
-            }
+        Args:
+            naics_code: The NAICS code to match
 
-            opportunities = self.fetch_opportunities(params)
+        Returns:
+            List of Company objects
+        """
+        companies = self.db.query(Company).filter(
+            Company.naics_codes.isnot(None)
+        ).all()
 
-            for opp_data in opportunities:
-                created = self.save_opportunity(db, opp_data)
-                if created:
-                    new_count += 1
+        matching = [c for c in companies if naics_code in (c.naics_codes or [])]
+        return matching
 
-            # Add delay between requests to respect rate limits (SAM.gov allows ~10 req/sec)
-            if idx < total_naics:
-                logger.info(f"Waiting 10 seconds before next request...")
-                time.sleep(10)
+    async def search_opportunities(
+        self,
+        naics_codes: List[str],
+        limit: int = 100
+    ) -> List[Dict]:
+        """
+        Search SAM.gov for opportunities matching NAICS codes.
 
-        logger.info(f"Discovery completed: {new_count} new opportunities added")
-        return new_count
+        Args:
+            naics_codes: List of NAICS codes to search for
+            limit: Maximum number of opportunities to return
 
-    def save_opportunity(self, db: Session, opp_data: dict) -> bool:
-        """Save or update opportunity in database"""
-        source_id = opp_data.get("noticeId", "")
+        Returns:
+            List of raw opportunity data from SAM.gov
+        """
+        try:
+            result = await sam_gov_service.search_opportunities(
+                naics_codes=naics_codes,
+                active=True,
+                limit=limit
+            )
 
-        # Check if already exists
-        existing = db.query(Opportunity).filter(
-            Opportunity.source == "SAM",
-            Opportunity.source_id == source_id
-        ).first()
+            opportunities = result.get("opportunities", [])
+            logger.info(f"Found {len(opportunities)} opportunities from SAM.gov")
+            return opportunities
 
-        if existing:
-            # Update if needed
-            return False
+        except Exception as e:
+            logger.error(f"Error searching SAM.gov: {str(e)}")
+            return []
 
-        # Parse dates
-        posted_date = self._parse_date(opp_data.get("postedDate"))
-        response_deadline = self._parse_date(opp_data.get("responseDeadLine"))
+    def process_opportunity(self, raw_opportunity: Dict) -> Optional[Opportunity]:
+        """
+        Process and store a single opportunity.
 
-        # Parse place of performance - handle None case
-        pop = opp_data.get("placeOfPerformance") or {}
-        city_data = pop.get("city") or {}
-        state_data = pop.get("state") or {}
+        Args:
+            raw_opportunity: Raw opportunity data from SAM.gov
 
-        # Extract city name - handle both string and dict formats
-        if isinstance(city_data, dict):
-            pop_city = city_data.get("name", city_data.get("code", ""))
-        else:
-            pop_city = str(city_data) if city_data else None
+        Returns:
+            Created or updated Opportunity object, or None on error
+        """
+        try:
+            # Parse opportunity data
+            opp_data = sam_gov_service.parse_opportunity(raw_opportunity)
 
-        # Extract state code - handle both string and dict formats
-        if isinstance(state_data, dict):
-            pop_state = state_data.get("code", state_data.get("name", ""))
-        else:
-            pop_state = str(state_data) if state_data else None
+            # Create or update opportunity
+            opportunity = opportunity_service.create_opportunity(self.db, opp_data)
 
-        # Truncate state to 2 characters (database limit)
-        if pop_state and len(pop_state) > 2:
-            pop_state = pop_state[:2]
+            return opportunity
 
-        # Create new opportunity
-        opportunity = Opportunity(
-            source="SAM",
-            source_id=source_id,
-            solicitation_number=opp_data.get("solicitationNumber"),
-            title=opp_data.get("title", ""),
-            description=opp_data.get("description"),
-            notice_type=opp_data.get("type"),
-            agency=opp_data.get("department"),
-            sub_agency=opp_data.get("subTier"),
-            office=opp_data.get("office"),
-            naics_code=opp_data.get("naicsCode"),
-            psc_code=opp_data.get("classificationCode"),
-            set_aside_type=opp_data.get("typeOfSetAside"),
-            pop_city=pop_city,
-            pop_state=pop_state,
-            pop_zip=pop.get("zip"),
-            posted_date=posted_date,
-            response_deadline=response_deadline,
-            contact_name=opp_data.get("pointOfContact", [{}])[0].get("fullName") if opp_data.get("pointOfContact") else None,
-            contact_email=opp_data.get("pointOfContact", [{}])[0].get("email") if opp_data.get("pointOfContact") else None,
-            contact_phone=opp_data.get("pointOfContact", [{}])[0].get("phone") if opp_data.get("pointOfContact") else None,
-            source_url=opp_data.get("uiLink"),
-            attachments=opp_data.get("resourceLinks", []),
-            status="active",
-            raw_data=opp_data
-        )
-
-        db.add(opportunity)
-        db.commit()
-
-        return True
-
-    def _parse_date(self, date_str: str) -> datetime:
-        """Parse date string from SAM.gov"""
-        if not date_str:
+        except Exception as e:
+            logger.error(f"Error processing opportunity: {str(e)}")
             return None
 
-        try:
-            return datetime.strptime(date_str, "%Y-%m-%d")
-        except:
-            try:
-                return datetime.strptime(date_str, "%m/%d/%Y")
-            except:
-                return None
+    def run_discovery(self) -> Dict:
+        """
+        Execute the full discovery workflow.
+
+        This method:
+        1. Collects NAICS codes from all companies
+        2. Searches SAM.gov for opportunities
+        3. Processes and stores new opportunities
+
+        Returns:
+            Dict with discovery statistics:
+            - companies: Number of companies with NAICS codes
+            - naics_codes: Number of unique NAICS codes searched
+            - discovered: Number of new opportunities discovered
+        """
+        logger.info("Starting opportunity discovery...")
+
+        # Get all NAICS codes
+        naics_codes = self.get_all_company_naics_codes()
+
+        if not naics_codes:
+            logger.info("No NAICS codes found - skipping discovery")
+            return {
+                "companies": 0,
+                "naics_codes": 0,
+                "discovered": 0
+            }
+
+        # Count companies
+        company_count = self.db.query(Company).filter(
+            Company.naics_codes.isnot(None)
+        ).count()
+
+        # Search for opportunities
+        raw_opportunities = asyncio.run(
+            self.search_opportunities(naics_codes)
+        )
+
+        # Process opportunities
+        discovered = 0
+        for raw_opp in raw_opportunities:
+            opportunity = self.process_opportunity(raw_opp)
+            if opportunity:
+                discovered += 1
+
+        logger.info(f"Discovery complete: {discovered} opportunities discovered")
+
+        return {
+            "companies": company_count,
+            "naics_codes": len(naics_codes),
+            "discovered": discovered
+        }
 
 
-def run_discovery():
-    """Run discovery agent (called by Celery)"""
-    db = SessionLocal()
-    try:
-        agent = DiscoveryAgent()
-        agent.poll_new_opportunities(db)
-    finally:
-        db.close()
+def run_discovery_agent() -> Dict:
+    """
+    Convenience function to run the discovery agent.
+
+    This function is called by the Celery task.
+
+    Returns:
+        Dict with discovery statistics
+    """
+    with DiscoveryAgent() as agent:
+        return agent.run_discovery()

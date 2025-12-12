@@ -1,384 +1,308 @@
 # Getting Started with GovAI
 
-Welcome to GovAI! This guide will help you get up and running in less than 15 minutes.
+This guide will help you get the GovAI platform running locally for development or testing.
 
-## What is GovAI?
+## Prerequisites
 
-GovAI is an AI-powered platform that automatically discovers and evaluates government contract opportunities for your business. Instead of spending hours searching SAM.gov, GovAI does the work for you - finding relevant opportunities, scoring them with AI, and recommending which ones you should bid on.
+Before you begin, ensure you have the following installed:
 
-## Quick Start (5 Steps)
+- **Docker Desktop** (Windows/Mac) or **Docker Engine** (Linux)
+  - Download: https://www.docker.com/products/docker-desktop
+- **Git** for version control
+  - Download: https://git-scm.com/downloads
 
-### Step 1: Create Your Account (2 minutes)
+## Quick Start (5 Minutes)
 
-1. Visit **https://govai.com**
-2. Click **"Get Started"**
-3. Fill in your information:
+### 1. Clone the Repository
+
+```bash
+git clone <your-repo-url>
+cd government-contract-evaluator-agent
+```
+
+### 2. Configure Environment
+
+```bash
+# Copy the example environment file
+cp .env.example .env
+```
+
+The default `.env` file is pre-configured for local development. For production, see the [Deployment Guide](../DEPLOYMENT.md).
+
+### 3. Start All Services
+
+```bash
+docker-compose up -d
+```
+
+This command starts:
+- **MySQL** database (port 3306)
+- **Redis** cache (port 6379)
+- **Backend** API (port 8000)
+- **Frontend** web app (port 3000)
+- **Celery Worker** for background tasks
+- **Celery Beat** for scheduled tasks
+
+### 4. Initialize the Database
+
+```bash
+docker-compose exec backend alembic upgrade head
+```
+
+### 5. Access the Application
+
+Open your browser and navigate to:
+
+- **Frontend**: http://localhost:3000
+- **API Documentation**: http://localhost:8000/docs
+- **Alternative API Docs**: http://localhost:8000/redoc
+
+## First-Time User Flow
+
+### 1. Register an Account
+
+1. Go to http://localhost:3000
+2. Click "Get Started" or navigate to `/register`
+3. Fill in your details:
    - Email address
-   - Password (minimum 8 characters)
+   - Password (min 8 characters)
    - First and last name
-4. Click **"Create Account"**
-5. Check your email for verification link
-6. Click the link to verify your email
+4. Submit the form
 
-**Done!** You now have a GovAI account.
+### 2. Verify Your Email
 
----
+In development mode, email verification links are printed to the console:
 
-### Step 2: Complete Company Profile (5 minutes)
-
-After email verification, you'll be taken to the onboarding page.
-
-**Required Information:**
-
-1. **Company Basics**
-   - Company name
-   - Legal structure (LLC, Corporation, etc.)
-   - Address
-
-2. **NAICS Codes** (Critical for matching)
-   - Enter your primary NAICS codes (3-5 recommended)
-   - Example: `541512` (Computer Systems Design)
-   - [Find your NAICS codes](https://www.naics.com/search/)
-
-3. **Set-Asides** (Certifications)
-   - Select all that apply:
-     - Small Business
-     - 8(a) Program
-     - Woman-Owned Small Business (WOSB)
-     - HUBZone
-     - Service-Disabled Veteran-Owned (SDVOSB)
-     - etc.
-
-4. **Contract Value Range**
-   - Minimum contract value you'll pursue: e.g., `$50,000`
-   - Maximum contract value you can handle: e.g., `$1,000,000`
-
-5. **Capabilities** (Free text)
-   - Describe what your company does
-   - Example: "IT consulting, cybersecurity services, cloud migration, DevSecOps"
-   - Be specific - this helps AI match opportunities
-
-6. **Certifications & Past Performance** (Optional but recommended)
-   - List relevant certifications (ISO, CMMI, etc.)
-   - Mention key past performance
-
-Click **"Complete Onboarding"**
-
-**Done!** Your profile is saved and AI matching begins immediately.
-
----
-
-### Step 3: Check Your Dashboard (2 minutes)
-
-You'll be redirected to your dashboard. Here's what you'll see:
-
-```
-┌─────────────────────────────────────────────────┐
-│ Dashboard                                       │
-├─────────────────────────────────────────────────┤
-│ Quick Stats:                                    │
-│  • 12 New Opportunities                         │
-│  • 0 Watching                                   │
-│  • 0 Preparing                                  │
-│  • 0 Submitted                                  │
-│  • Avg Fit Score: 0 (no pipeline yet)          │
-├─────────────────────────────────────────────────┤
-│ New Opportunities:                              │
-│                                                 │
-│ [92] DoD Cybersecurity Assessment              │
-│      Set-Aside: Small Business                 │
-│      NAICS: 541512 ✓ Match                    │
-│      Deadline: 16 days                         │
-│      [View Details] [Save to Pipeline]         │
-│                                                 │
-│ [87] VA Network Security Upgrade               │
-│      ...                                        │
-└─────────────────────────────────────────────────┘
+```bash
+# View backend logs
+docker-compose logs backend
 ```
 
-**What the Numbers Mean:**
-- **[92]** = Fit Score (0-100, higher is better)
-- **85-100**: Excellent match, strongly consider bidding
-- **70-84**: Good match, review carefully
-- **Below 70**: Poor match, probably skip
-
-**Recommendations:**
-- **BID**: AI recommends pursuing this opportunity
-- **REVIEW**: Worth investigating further
-- **NO_BID**: Probably not a good fit
-
----
-
-### Step 4: Review an Opportunity (3 minutes)
-
-Click **"View Details"** on a high-fit opportunity.
-
-**What You'll See:**
-
-1. **Opportunity Information**
-   - Title, agency, solicitation number
-   - Posted date and response deadline
-   - Contract value estimate
-   - NAICS code and set-aside type
-   - Point of contact information
-   - Link to full RFP on SAM.gov
-
-2. **AI Evaluation** (The Magic!)
-   ```
-   Fit Score: 92/100
-   Win Probability: 75%
-   Recommendation: BID ✓
-   Confidence: 85%
-
-   Strengths:
-    ✓ Exact NAICS match (541512)
-    ✓ Small Business set-aside
-    ✓ Contract value in your range
-    ✓ Strong capability alignment
-    ✓ Location preference (Virginia)
-
-   Weaknesses:
-    ✗ Requires Top Secret clearance (team)
-    ✗ 45-day turnaround may be tight
-
-   Key Considerations:
-    • Review clearance requirements
-    • Assess team availability
-    • Past performance narrative required
-
-   Executive Summary:
-   "TechDefense Solutions is an excellent match for this
-   cybersecurity assessment contract. Your NIST compliance
-   expertise and DoD experience align perfectly. Main
-   consideration is ensuring team clearances are current."
-   ```
-
-3. **Actions**
-   - **Save to Pipeline**: Add to your tracking system
-   - **Dismiss**: Mark as not interested
-   - **Download RFP**: Get full document from SAM.gov
-
----
-
-### Step 5: Save to Pipeline (2 minutes)
-
-If you like the opportunity, click **"Save to Pipeline"**.
-
-**Choose a Status:**
-- **Watching**: Monitoring for now, not actively pursuing yet
-- **Pursuing**: Decided to bid, gathering information
-- **Preparing**: Actively writing proposal
-- **Submitted**: Proposal submitted, waiting for award
-- **Won**: Contract awarded to you 🎉
-- **Lost**: Not selected
-
-**Add a Note** (Optional):
+Look for:
 ```
-Example: "Need to check Tom's clearance status before committing"
+================================================================================
+EMAIL VERIFICATION LINK FOR: your@email.com
+Link: http://localhost:3000/verify-email?token=abc123...
+================================================================================
 ```
 
-**Done!** The opportunity is now in your pipeline.
+Copy and open this link in your browser.
 
----
+### 3. Complete Company Onboarding
 
-## Daily Usage (5 minutes per day)
+After logging in, you'll be guided through a 3-step onboarding:
 
-Once set up, your daily routine is simple:
+**Step 1 - Company Information**:
+- Company name
+- Legal structure (LLC, Corporation, etc.)
+- UEI number (optional)
+- Business address
 
-### Morning Routine (3 minutes)
+**Step 2 - Capabilities**:
+- NAICS codes (search and select up to 10)
+- Set-aside certifications (8(a), WOSB, SDVOSB, HUBZone)
+- Contract value range
+- Geographic preferences (states)
 
-1. **Check Email Digest (8:00 AM)**
-   - Receive email with top 5 new opportunities
-   - Click link to view in dashboard
+**Step 3 - Capabilities Statement**:
+- Describe your company's capabilities (up to 500 words)
+- Review and submit
 
-2. **Scan Dashboard (2 minutes)**
-   - Review new opportunities by fit score
-   - Dismiss obvious no's
-   - Save interesting ones to "Watching"
+### 4. Explore the Dashboard
 
-3. **Deep Dive on High-Fits (1-2 opportunities, 3 minutes)**
-   - Read AI analysis
-   - Check if team has capacity
-   - Decide: Save to "Pursuing" or Dismiss
+After onboarding, you can:
+- View AI-evaluated opportunities
+- Filter by recommendation (BID/NO_BID/RESEARCH)
+- Review detailed analysis
+- Save opportunities to your pipeline
+- Manage saved opportunities
 
-**Total Time**: ~5 minutes
+## Configuration
 
-### Weekly Review (10 minutes)
+### Environment Variables
 
-1. **Check Pipeline Page (5 minutes)**
-   - Review all saved opportunities
-   - Update status (move from Watching → Pursuing, etc.)
-   - Add notes on progress
-   - Check upcoming deadlines
+Key variables in `.env`:
 
-2. **Clean Up (5 minutes)**
-   - Dismiss opportunities you've decided against
-   - Archive submitted proposals
-   - Update team on key opportunities
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `DATABASE_URL` | MySQL connection string | Local MySQL |
+| `REDIS_URL` | Redis connection string | Local Redis |
+| `JWT_SECRET` | Secret for JWT tokens | Development key |
+| `EMAIL_MODE` | `console` or `sendgrid` | `console` |
+| `OPENAI_API_KEY` | For AI evaluations | Required for AI |
+| `SAM_API_KEY` | For SAM.gov API | Required for discovery |
 
-**Total Time**: ~10 minutes
+### API Keys (Optional for Development)
 
----
+For full functionality, you'll need:
 
-## Understanding AI Scoring
+1. **OpenAI API Key**: https://platform.openai.com/api-keys
+2. **SAM.gov API Key**: https://sam.gov/api
 
-### How Fit Score Works (0-100)
-
-```
-FIT SCORE Breakdown:
-├── NAICS Alignment (0-30 points)
-│   └── 30 pts: Exact match
-│   └── 20 pts: Related code
-│   └── 10 pts: Broad category
-│
-├── Set-Aside Match (0-25 points)
-│   └── 25 pts: Perfect match (you're certified)
-│   └── 15 pts: Eligible but not optimized
-│   └── 0 pts: No match
-│
-├── Contract Value Fit (0-20 points)
-│   └── 20 pts: Within your range
-│   └── 10 pts: Slightly outside range
-│   └── 0 pts: Way too big/small
-│
-└── Capability Alignment (0-25 points)
-    └── AI analyzes description vs. your capabilities
-    └── 25 pts: Perfect capability match
-    └── 15 pts: Good alignment
-    └── 5 pts: Weak alignment
+Add these to your `.env` file:
+```bash
+OPENAI_API_KEY=sk-your-key-here
+SAM_API_KEY=your-sam-api-key
 ```
 
-### Win Probability
+## Common Commands
 
-AI estimates your chance of winning based on:
-- Your fit score
-- Typical competition level
-- Your past performance (if entered)
-- Complexity of requirements
+### Managing Docker Services
 
-**Interpretation:**
-- **80-100%**: Very strong position
-- **60-80%**: Competitive position
-- **40-60%**: Possible, but challenging
-- **Below 40%**: Long shot
+```bash
+# Start all services
+docker-compose up -d
 
-### Recommendations
+# Stop all services
+docker-compose down
 
-- **BID**: Fit ≥ 80 AND Win Probability ≥ 60%
-- **REVIEW**: Fit 60-80 OR Win Probability 40-60%
-- **NO_BID**: Fit < 60 OR Win Probability < 40%
+# View logs
+docker-compose logs -f
 
----
+# View specific service logs
+docker-compose logs -f backend
+docker-compose logs -f frontend
 
-## Tips for Success
+# Restart a service
+docker-compose restart backend
 
-### 1. Complete Your Profile Thoroughly
-- More details = better AI matching
-- Update when you gain new capabilities
-- Add past performance as you win contracts
+# Rebuild after code changes
+docker-compose up -d --build
 
-### 2. Act on High-Fit Opportunities Quickly
-- Opportunities with fit score > 85 are rare
-- Don't wait - competitors are also searching
-- Save to "Pursuing" immediately if interested
+# Stop and remove all data
+docker-compose down -v
+```
 
-### 3. Use Pipeline Status Religiously
-- Keep status current (helps with reporting)
-- Move opportunities through stages
-- Archive when done (won or lost)
+### Database Commands
 
-### 4. Add Notes for Team Collaboration
-- Document conversations with CORs
-- Record decisions and rationale
-- Share insights with team members
+```bash
+# Run migrations
+docker-compose exec backend alembic upgrade head
 
-### 5. Review Dismissed Opportunities Weekly
-- You might change your mind
-- Circumstances change (new teaming partner, etc.)
-- "Undismiss" feature available
+# Create new migration
+docker-compose exec backend alembic revision --autogenerate -m "description"
 
-### 6. Set Up Deadline Reminders
-- Default: 7, 3, 1 day before deadline
-- Customize in Settings → Notifications
-- Never miss a response deadline again
+# Rollback migration
+docker-compose exec backend alembic downgrade -1
 
-### 7. Refine Your NAICS Codes
-- If getting too many irrelevant opportunities, narrow NAICS
-- If getting too few, add more NAICS codes
-- Review monthly and adjust
+# Access MySQL CLI
+docker-compose exec mysql mysql -u govai_user -p govai
+# Password: govai_password_dev (or from .env)
+```
 
----
+### Development Shell
 
-## Common Questions
+```bash
+# Access backend container
+docker-compose exec backend bash
 
-### How often does GovAI check SAM.gov?
-**Every 15 minutes.** New opportunities appear on your dashboard within 15-30 minutes of being posted to SAM.gov.
+# Python shell with app context
+docker-compose exec backend python
+>>> from app.models import User
+>>> from app.core.database import SessionLocal
+>>> db = SessionLocal()
+>>> users = db.query(User).all()
+```
 
-### Can I search for specific keywords?
-**Yes!** Use the search bar on the Opportunities page. Search by:
-- Agency name (e.g., "Department of Defense")
-- Keywords (e.g., "cybersecurity", "cloud")
-- Solicitation number
+## Troubleshooting
 
-### How accurate is the AI scoring?
-**Very accurate.** The AI scoring has been validated against thousands of real bid decisions. Opportunities with fit scores > 85 have a 3x higher win rate than those < 70.
+### Port Already in Use
 
-### What if I disagree with the AI recommendation?
-**You're the boss!** AI is a tool to help you, not make final decisions. If you think an opportunity is good despite a lower score, pursue it. The AI learns from your feedback.
+```bash
+# Check what's using the port (Windows)
+netstat -ano | findstr :3000
 
-### Can I customize the scoring algorithm?
-**Not yet, but coming soon!** We're working on custom weighting for fit score components.
+# Check what's using the port (Mac/Linux)
+lsof -i :3000
 
-### How many opportunities will I see?
-**It depends on your NAICS codes.** Typical range:
-- 1-3 NAICS codes: 20-40 opportunities per month
-- 4-6 NAICS codes: 40-80 opportunities per month
-- 7+ NAICS codes: 80-150 opportunities per month
+# Solution: Stop Docker and restart
+docker-compose down
+docker-compose up -d
+```
 
-### Does GovAI write proposals?
-**No.** GovAI helps you *find* and *evaluate* opportunities. Proposal writing is still up to you (or your proposal team).
+### Database Connection Errors
 
-### Can my whole team use GovAI?
-**Yes!** Enterprise plans support multiple users with role-based permissions.
+```bash
+# Check if MySQL is running
+docker-compose ps
 
-### What about contract vehicles (GWACs, BPAs)?
-**Support coming soon!** Currently focused on open solicitations. Contract vehicle support planned for Q2 2026.
+# View MySQL logs
+docker-compose logs mysql
 
----
+# Restart MySQL
+docker-compose restart mysql
+
+# Wait 30 seconds, then restart other services
+docker-compose restart backend celery-worker
+```
+
+### Frontend Not Loading
+
+```bash
+# Check frontend logs
+docker-compose logs frontend
+
+# Rebuild frontend
+docker-compose up -d --build frontend
+```
+
+### Backend Errors
+
+```bash
+# View backend logs
+docker-compose logs backend
+
+# Restart backend
+docker-compose restart backend
+
+# Check if migrations ran
+docker-compose exec backend alembic current
+```
+
+### "Module Not Found" Errors
+
+```bash
+# Rebuild all containers
+docker-compose down
+docker-compose up -d --build
+```
+
+## Testing the API
+
+### Using Swagger UI
+
+1. Open http://localhost:8000/docs
+2. Click "Authorize" button
+3. Enter your JWT token (after login)
+4. Try out the endpoints
+
+### Using cURL
+
+```bash
+# Register
+curl -X POST http://localhost:8000/api/v1/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"email":"test@example.com","password":"password123","first_name":"Test","last_name":"User"}'
+
+# Login
+curl -X POST http://localhost:8000/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"test@example.com","password":"password123"}'
+
+# Use token in requests
+curl http://localhost:8000/api/v1/auth/me \
+  -H "Authorization: Bearer YOUR_TOKEN_HERE"
+```
 
 ## Next Steps
 
-Now that you're set up:
+1. **Explore the API**: http://localhost:8000/docs
+2. **Read the Architecture**: [System Architecture](../architecture/system-architecture.md)
+3. **Review User Stories**: [User Stories](../user-stories/)
+4. **Deploy to Production**: [Deployment Guide](../../DEPLOYMENT.md)
 
-1. **Explore Your Dashboard** - Get familiar with the interface
-2. **Review 5-10 Opportunities** - See how AI scoring works
-3. **Save 2-3 to Pipeline** - Start tracking opportunities
-4. **Set Up Notifications** - Customize email preferences
-5. **Invite Team Members** (if applicable) - Collaborate effectively
+## Getting Help
 
----
-
-## Need Help?
-
-- **Documentation**: [docs.govai.com](https://docs.govai.com)
-- **Video Tutorials**: [youtube.com/govai](https://youtube.com/govai)
-- **Email Support**: support@govai.com
-- **Live Chat**: Available in-app (bottom right corner)
-- **Schedule Demo**: [govai.com/demo](https://govai.com/demo)
-
----
-
-## Success Stories
-
-> "GovAI cut my opportunity discovery time from 10 hours per week to less than 1 hour. The AI recommendations are spot-on - we've doubled our win rate."
-> — Sarah Chen, CEO, TechDefense Solutions
-
-> "As a BD manager, GovAI gave my team superpowers. We're processing 3x more opportunities with the same headcount."
-> — Michael Rodriguez, BD Manager, Federal Solutions Group
-
-> "The deadline reminders alone are worth it. We haven't missed a single response deadline since switching to GovAI."
-> — Emily Washington, Proposal Manager
-
----
-
-**Welcome to smarter government contracting!** 🚀
+- **API Documentation**: http://localhost:8000/docs
+- **Check Logs**: `docker-compose logs -f`
+- **Container Status**: `docker-compose ps`

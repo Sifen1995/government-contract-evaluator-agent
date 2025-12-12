@@ -1,52 +1,82 @@
 from sqlalchemy.orm import Session
-from fastapi import HTTPException, status
 from datetime import datetime, timedelta
-import secrets
-from ..models.user import User
-from ..core.security import get_password_hash, verify_password, create_access_token
-from ..schemas.user import UserCreate
+from typing import Optional
+from fastapi import HTTPException, status
+from app.models.user import User
+from app.core.security import (
+    get_password_hash,
+    verify_password,
+    create_access_token,
+    generate_token
+)
+from app.core.config import settings
+from app.schemas.user import UserCreate
+from app.services.email import (
+    email_service,
+    get_verification_email_template,
+    get_password_reset_template
+)
+
+
+def get_user_by_email(db: Session, email: str) -> Optional[User]:
+    """Get user by email."""
+    return db.query(User).filter(User.email == email).first()
+
+
+def get_user_by_id(db: Session, user_id: str) -> Optional[User]:
+    """Get user by ID."""
+    return db.query(User).filter(User.id == user_id).first()
 
 
 def create_user(db: Session, user_data: UserCreate) -> User:
-    """Create a new user"""
+    """Create a new user with hashed password and verification token."""
     # Check if user already exists
-    existing_user = db.query(User).filter(User.email == user_data.email).first()
+    existing_user = get_user_by_email(db, user_data.email)
     if existing_user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Email already registered"
         )
 
+    # Create verification token
+    verification_token = generate_token()
+    verification_expires = datetime.utcnow() + timedelta(hours=24)
+
     # Create user
-    user = User(
+    db_user = User(
         email=user_data.email,
         password_hash=get_password_hash(user_data.password),
         first_name=user_data.first_name,
         last_name=user_data.last_name,
-        email_frequency=user_data.email_frequency,
-        email_verified=True  # Auto-verify for local development
+        verification_token=verification_token,
+        verification_token_expires=verification_expires,
+        email_verified=False
     )
 
-    db.add(user)
+    db.add(db_user)
     db.commit()
-    db.refresh(user)
+    db.refresh(db_user)
 
-    return user
+    # Send verification email (console mode for now)
+    send_verification_email(db_user.email, verification_token)
+
+    return db_user
 
 
-def authenticate_user(db: Session, email: str, password: str) -> User:
-    """Authenticate a user"""
-    user = db.query(User).filter(User.email == email).first()
+def authenticate_user(db: Session, email: str, password: str) -> Optional[User]:
+    """Authenticate user with email and password."""
+    user = get_user_by_email(db, email)
+
     if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password"
-        )
+        return None
 
     if not verify_password(password, user.password_hash):
+        return None
+
+    if not user.email_verified:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password"
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Email not verified. Please check your email for verification link."
         )
 
     # Update last login
@@ -56,46 +86,96 @@ def authenticate_user(db: Session, email: str, password: str) -> User:
     return user
 
 
-def generate_verification_token() -> str:
-    """Generate a verification token"""
-    return secrets.token_urlsafe(32)
+def verify_email(db: Session, token: str) -> User:
+    """Verify user email with token."""
+    user = db.query(User).filter(User.verification_token == token).first()
 
-
-def generate_password_reset_token() -> str:
-    """Generate a password reset token"""
-    return secrets.token_urlsafe(32)
-
-
-def verify_email_token(db: Session, token: str) -> User:
-    """Verify email with token (simplified - in production use a token store)"""
-    # In production, you'd store tokens in Redis or a database table
-    # For MVP, we'll accept any valid token format
-    user = db.query(User).filter(User.email_verified == False).first()
     if not user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid or expired token"
+            detail="Invalid verification token"
         )
 
+    if user.verification_token_expires < datetime.utcnow():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Verification token has expired"
+        )
+
+    # Mark email as verified
     user.email_verified = True
+    user.verification_token = None
+    user.verification_token_expires = None
     db.commit()
     db.refresh(user)
 
     return user
 
 
+def send_verification_email(email: str, token: str):
+    """Send verification email."""
+    link = f"{settings.FRONTEND_URL}/verify-email?token={token}"
+    html_content = get_verification_email_template(link)
+
+    email_service.send_email(
+        to_email=email,
+        subject="Verify your GovAI account",
+        html_content=html_content
+    )
+
+
+def generate_password_reset(db: Session, email: str):
+    """Generate password reset token and send email."""
+    user = get_user_by_email(db, email)
+
+    if not user:
+        # Don't reveal if email exists or not for security
+        return
+
+    # Generate reset token
+    reset_token = generate_token()
+    reset_expires = datetime.utcnow() + timedelta(hours=1)
+
+    user.password_reset_token = reset_token
+    user.password_reset_expires = reset_expires
+    db.commit()
+
+    # Send reset email (console mode)
+    send_password_reset_email(user.email, reset_token)
+
+
+def send_password_reset_email(email: str, token: str):
+    """Send password reset email."""
+    link = f"{settings.FRONTEND_URL}/reset-password?token={token}"
+    html_content = get_password_reset_template(link)
+
+    email_service.send_email(
+        to_email=email,
+        subject="Reset your GovAI password",
+        html_content=html_content
+    )
+
+
 def reset_password(db: Session, token: str, new_password: str) -> User:
-    """Reset user password with token"""
-    # In production, you'd validate the token against a token store
-    # For MVP, we'll use a simplified approach
-    user = db.query(User).first()
+    """Reset user password with token."""
+    user = db.query(User).filter(User.password_reset_token == token).first()
+
     if not user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid or expired token"
+            detail="Invalid reset token"
         )
 
+    if user.password_reset_expires < datetime.utcnow():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Reset token has expired"
+        )
+
+    # Update password
     user.password_hash = get_password_hash(new_password)
+    user.password_reset_token = None
+    user.password_reset_expires = None
     db.commit()
     db.refresh(user)
 

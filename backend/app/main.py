@@ -1,49 +1,129 @@
-"""FastAPI Application Entry Point"""
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 from app.core.config import settings
-from app.api import auth, users, company, opportunities, pipeline
+from app.core.database import SessionLocal
+from app.api.v1 import api_router
+import redis
+import logging
+
+logger = logging.getLogger(__name__)
+
+# Rate limiter
+limiter = Limiter(key_func=get_remote_address)
 
 # Create FastAPI app
 app = FastAPI(
     title=settings.APP_NAME,
-    version=settings.VERSION,
-    debug=settings.DEBUG
+    version=settings.APP_VERSION,
+    description="AI-Powered Government Contract Discovery Platform",
+    docs_url="/docs" if settings.DEBUG else None,
+    redoc_url="/redoc" if settings.DEBUG else None,
 )
+
+# Add rate limiter
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins,
+    allow_origins=settings.cors_origins_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Include routers
-app.include_router(auth.router, prefix=f"{settings.API_V1_STR}")
-app.include_router(users.router, prefix=f"{settings.API_V1_STR}")
-app.include_router(company.router, prefix=f"{settings.API_V1_STR}")
-app.include_router(opportunities.router, prefix=f"{settings.API_V1_STR}")
-app.include_router(pipeline.router, prefix=f"{settings.API_V1_STR}")
+
+# Global exception handler
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.error(f"Unhandled exception: {str(exc)}", exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "An internal error occurred. Please try again later."}
+    )
+
+
+# Include API routers
+app.include_router(api_router, prefix="/api/v1")
 
 
 @app.get("/")
 def root():
-    """Root endpoint"""
+    """Root endpoint."""
     return {
-        "app": settings.APP_NAME,
-        "version": settings.VERSION,
+        "name": settings.APP_NAME,
+        "version": settings.APP_VERSION,
         "status": "running"
     }
 
 
 @app.get("/health")
 def health_check():
-    """Health check endpoint"""
+    """Basic health check endpoint."""
     return {"status": "healthy"}
 
 
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+@app.get("/health/detailed")
+def detailed_health_check():
+    """
+    Detailed health check endpoint.
+    Checks database and Redis connectivity.
+    """
+    health_status = {
+        "status": "healthy",
+        "checks": {
+            "api": "ok",
+            "database": "unknown",
+            "redis": "unknown",
+        }
+    }
+
+    # Check database
+    try:
+        db = SessionLocal()
+        db.execute("SELECT 1")
+        db.close()
+        health_status["checks"]["database"] = "ok"
+    except Exception as e:
+        health_status["checks"]["database"] = f"error: {str(e)}"
+        health_status["status"] = "degraded"
+
+    # Check Redis
+    try:
+        r = redis.from_url(settings.REDIS_URL)
+        r.ping()
+        health_status["checks"]["redis"] = "ok"
+    except Exception as e:
+        health_status["checks"]["redis"] = f"error: {str(e)}"
+        health_status["status"] = "degraded"
+
+    return health_status
+
+
+@app.get("/ready")
+def readiness_check():
+    """
+    Readiness check for Kubernetes/container orchestration.
+    Returns 200 only if all dependencies are ready.
+    """
+    try:
+        # Check database
+        db = SessionLocal()
+        db.execute("SELECT 1")
+        db.close()
+
+        # Check Redis
+        r = redis.from_url(settings.REDIS_URL)
+        r.ping()
+
+        return {"ready": True}
+    except Exception as e:
+        return JSONResponse(
+            status_code=503,
+            content={"ready": False, "error": str(e)}
+        )

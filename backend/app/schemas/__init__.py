@@ -1,25 +1,52 @@
-from .user import (
-    User, UserCreate, UserUpdate, UserLogin,
-    TokenResponse, PasswordResetRequest, PasswordReset, EmailVerify
+from .user import UserCreate, UserUpdate, UserResponse, UserInDB
+from .auth import (
+    LoginRequest,
+    LoginResponse,
+    RegisterRequest,
+    VerifyEmailRequest,
+    ForgotPasswordRequest,
+    ResetPasswordRequest,
+    MessageResponse
 )
-from .company import Company, CompanyCreate, CompanyUpdate
+from .company import CompanyCreate, CompanyUpdate, CompanyResponse
 from .opportunity import (
-    Opportunity, OpportunityCreate, OpportunityWithEvaluation,
-    OpportunityList, OpportunityFilter
-)
-from .evaluation import Evaluation, EvaluationCreate, EvaluationRequest
-from .pipeline import (
-    SavedOpportunity, SavedOpportunityCreate, SavedOpportunityUpdate,
-    PipelineStats, DeadlineItem, PipelineDeadlines
+    OpportunityCreate,
+    OpportunityUpdate,
+    OpportunityInDB,
+    OpportunityWithEvaluation,
+    OpportunityListResponse,
+    OpportunityStatsResponse,
+    EvaluationCreate,
+    EvaluationUpdate,
+    EvaluationInDB,
+    EvaluationWithOpportunity,
+    EvaluationListResponse,
 )
 
 __all__ = [
-    "User", "UserCreate", "UserUpdate", "UserLogin",
-    "TokenResponse", "PasswordResetRequest", "PasswordReset", "EmailVerify",
-    "Company", "CompanyCreate", "CompanyUpdate",
-    "Opportunity", "OpportunityCreate", "OpportunityWithEvaluation",
-    "OpportunityList", "OpportunityFilter",
-    "Evaluation", "EvaluationCreate", "EvaluationRequest",
-    "SavedOpportunity", "SavedOpportunityCreate", "SavedOpportunityUpdate",
-    "PipelineStats", "DeadlineItem", "PipelineDeadlines",
+    "UserCreate",
+    "UserUpdate",
+    "UserResponse",
+    "UserInDB",
+    "LoginRequest",
+    "LoginResponse",
+    "RegisterRequest",
+    "VerifyEmailRequest",
+    "ForgotPasswordRequest",
+    "ResetPasswordRequest",
+    "MessageResponse",
+    "CompanyCreate",
+    "CompanyUpdate",
+    "CompanyResponse",
+    "OpportunityCreate",
+    "OpportunityUpdate",
+    "OpportunityInDB",
+    "OpportunityWithEvaluation",
+    "OpportunityListResponse",
+    "OpportunityStatsResponse",
+    "EvaluationCreate",
+    "EvaluationUpdate",
+    "EvaluationInDB",
+    "EvaluationWithOpportunity",
+    "EvaluationListResponse",
 ]

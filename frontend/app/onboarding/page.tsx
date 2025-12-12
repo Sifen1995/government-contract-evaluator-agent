@@ -1,415 +1,397 @@
-"use client";
+'use client'
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import api from "@/lib/api";
-
-const LEGAL_STRUCTURES = ["LLC", "Corp", "Sole Prop", "Partnership"];
-const SET_ASIDES = ["8(a)", "WOSB", "SDVOSB", "HUBZone", "Small Business"];
-const VALUE_RANGES = [
-  { label: "$0 - $100K", min: 0, max: 100000 },
-  { label: "$100K - $1M", min: 100000, max: 1000000 },
-  { label: "$1M - $10M", min: 1000000, max: 10000000 },
-  { label: "$10M+", min: 10000000, max: null },
-];
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import { useAuth } from '@/hooks/useAuth'
+import api from '@/lib/api'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { NativeSelect } from '@/components/ui/select'
+import { Textarea } from '@/components/ui/textarea'
+import { MultiSelect } from '@/components/ui/multi-select'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { NAICSCode, SetAside, ContractRange, USState } from '@/types/reference'
 
 export default function OnboardingPage() {
-  const router = useRouter();
-  const [step, setStep] = useState(1);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const router = useRouter()
+  const { user, loading: authLoading } = useAuth()
 
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [step, setStep] = useState(1)
+
+  // Reference data
+  const [naicsCodes, setNaicsCodes] = useState<NAICSCode[]>([])
+  const [setAsides, setSetAsides] = useState<SetAside[]>([])
+  const [contractRanges, setContractRanges] = useState<ContractRange[]>([])
+  const [states, setStates] = useState<USState[]>([])
+  const [legalStructures, setLegalStructures] = useState<string[]>([])
+
+  // Form data
   const [formData, setFormData] = useState({
-    name: "",
-    legal_structure: "",
-    address_street: "",
-    address_city: "",
-    address_state: "",
-    address_zip: "",
-    uei: "",
+    name: '',
+    legal_structure: '',
+    address_street: '',
+    address_city: '',
+    address_state: '',
+    address_zip: '',
+    uei: '',
     naics_codes: [] as string[],
     set_asides: [] as string[],
-    capabilities: "",
+    capabilities: '',
     contract_value_min: 0,
-    contract_value_max: null as number | null,
+    contract_value_max: 0,
     geographic_preferences: [] as string[],
-  });
+  })
 
-  const [naicsInput, setNaicsInput] = useState("");
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    });
-  };
-
-  const handleSetAsideToggle = (setAside: string) => {
-    if (formData.set_asides.includes(setAside)) {
-      setFormData({
-        ...formData,
-        set_asides: formData.set_asides.filter((s) => s !== setAside),
-      });
-    } else {
-      setFormData({
-        ...formData,
-        set_asides: [...formData.set_asides, setAside],
-      });
+  useEffect(() => {
+    if (!authLoading && !user) {
+      router.push('/login')
     }
-  };
+  }, [user, authLoading, router])
 
-  const handleAddNaics = () => {
-    if (naicsInput && formData.naics_codes.length < 10) {
-      setFormData({
-        ...formData,
-        naics_codes: [...formData.naics_codes, naicsInput],
-      });
-      setNaicsInput("");
+  useEffect(() => {
+    // Load reference data
+    const loadReferenceData = async () => {
+      try {
+        const response = await api.get('/reference/all')
+        setNaicsCodes(response.data.naics_codes)
+        setSetAsides(response.data.set_asides)
+        setContractRanges(response.data.contract_ranges)
+        setStates(response.data.states)
+        setLegalStructures(response.data.legal_structures)
+      } catch (err) {
+        console.error('Failed to load reference data:', err)
+      }
     }
-  };
 
-  const handleRemoveNaics = (code: string) => {
-    setFormData({
-      ...formData,
-      naics_codes: formData.naics_codes.filter((c) => c !== code),
-    });
-  };
+    loadReferenceData()
+  }, [])
 
-  const handleValueRangeChange = (range: typeof VALUE_RANGES[0]) => {
-    setFormData({
-      ...formData,
-      contract_value_min: range.min,
-      contract_value_max: range.max,
-    });
-  };
-
-  const handleSubmit = async () => {
-    setError("");
-    setLoading(true);
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError('')
+    setLoading(true)
 
     try {
-      const token = localStorage.getItem("token");
-      if (!token) {
-        router.push("/login");
-        return;
-      }
-
-      await api.company.create(token, formData);
-      router.push("/dashboard");
+      await api.post('/company/', formData)
+      router.push('/dashboard')
     } catch (err: any) {
-      setError(err.message || "Failed to create company profile");
+      setError(err.response?.data?.detail || 'Failed to create company profile')
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }
+
+  const nextStep = () => {
+    if (step < 3) setStep(step + 1)
+  }
+
+  const prevStep = () => {
+    if (step > 1) setStep(step - 1)
+  }
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    )
+  }
+
+  const naicsOptions = naicsCodes.map(n => ({ value: n.code, label: `${n.code} - ${n.title}` }))
+  const setAsideOptions = setAsides.map(s => ({ value: s.code, label: s.name }))
+  const stateOptions = states.map(s => ({ value: s.code, label: s.name }))
 
   return (
-    <div className="min-h-screen bg-gray-50 py-12">
-      <div className="container mx-auto px-4 max-w-3xl">
-        <div className="bg-white rounded-lg shadow-md p-8">
-          <h1 className="text-3xl font-bold text-center mb-2">Complete Your Profile</h1>
-          <p className="text-center text-gray-600 mb-8">
-            Tell us about your business to get personalized contract recommendations
-          </p>
+    <div className="min-h-screen bg-gray-50 py-12 px-4">
+      <div className="max-w-3xl mx-auto">
+        <div className="text-center mb-8">
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Complete Your Company Profile</h1>
+          <p className="text-gray-600">Step {step} of 3</p>
+        </div>
 
-          {/* Progress */}
-          <div className="mb-8">
-            <div className="flex justify-between mb-2">
-              <span className="text-sm font-medium">Step {step} of 3</span>
-              <span className="text-sm text-gray-500">{Math.round((step / 3) * 100)}%</span>
+        <div className="mb-8">
+          <div className="flex items-center justify-between">
+            <div className={`flex items-center ${step >= 1 ? 'text-blue-600' : 'text-gray-400'}`}>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step >= 1 ? 'bg-blue-600 text-white' : 'bg-gray-300'}`}>
+                1
+              </div>
+              <span className="ml-2 text-sm font-medium">Company Info</span>
             </div>
-            <div className="w-full bg-gray-200 rounded-full h-2">
-              <div
-                className="bg-blue-600 h-2 rounded-full transition-all"
-                style={{ width: `${(step / 3) * 100}%` }}
-              />
+            <div className="flex-1 h-1 mx-4 bg-gray-300">
+              <div className={`h-full ${step >= 2 ? 'bg-blue-600' : 'bg-gray-300'}`} style={{ width: step >= 2 ? '100%' : '0%' }}></div>
             </div>
-          </div>
-
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded mb-4">
-              {error}
+            <div className={`flex items-center ${step >= 2 ? 'text-blue-600' : 'text-gray-400'}`}>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step >= 2 ? 'bg-blue-600 text-white' : 'bg-gray-300'}`}>
+                2
+              </div>
+              <span className="ml-2 text-sm font-medium">NAICS & Certifications</span>
             </div>
-          )}
-
-          {/* Step 1: Company Info */}
-          {step === 1 && (
-            <div className="space-y-4">
-              <h2 className="text-xl font-semibold mb-4">Company Information</h2>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Company Name *
-                </label>
-                <input
-                  type="text"
-                  name="name"
-                  value={formData.name}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Legal Structure *
-                </label>
-                <select
-                  name="legal_structure"
-                  value={formData.legal_structure}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                >
-                  <option value="">Select...</option>
-                  {LEGAL_STRUCTURES.map((structure) => (
-                    <option key={structure} value={structure}>
-                      {structure}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Street Address *
-                </label>
-                <input
-                  type="text"
-                  name="address_street"
-                  value={formData.address_street}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                />
-              </div>
-
-              <div className="grid grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    City *
-                  </label>
-                  <input
-                    type="text"
-                    name="address_city"
-                    value={formData.address_city}
-                    onChange={handleChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    State *
-                  </label>
-                  <input
-                    type="text"
-                    name="address_state"
-                    value={formData.address_state}
-                    onChange={handleChange}
-                    maxLength={2}
-                    placeholder="CA"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    ZIP *
-                  </label>
-                  <input
-                    type="text"
-                    name="address_zip"
-                    value={formData.address_zip}
-                    onChange={handleChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  UEI (Optional)
-                </label>
-                <input
-                  type="text"
-                  name="uei"
-                  value={formData.uei}
-                  onChange={handleChange}
-                  maxLength={12}
-                  placeholder="SAM.gov UEI"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-                <p className="text-xs text-gray-500 mt-1">Your SAM.gov Unique Entity Identifier</p>
-              </div>
+            <div className="flex-1 h-1 mx-4 bg-gray-300">
+              <div className={`h-full ${step >= 3 ? 'bg-blue-600' : 'bg-gray-300'}`} style={{ width: step >= 3 ? '100%' : '0%' }}></div>
             </div>
-          )}
-
-          {/* Step 2: NAICS & Set-Asides */}
-          {step === 2 && (
-            <div className="space-y-6">
-              <h2 className="text-xl font-semibold mb-4">NAICS Codes & Certifications</h2>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  NAICS Codes * (up to 10)
-                </label>
-                <div className="flex gap-2 mb-2">
-                  <input
-                    type="text"
-                    value={naicsInput}
-                    onChange={(e) => setNaicsInput(e.target.value)}
-                    placeholder="Enter 6-digit NAICS code"
-                    maxLength={6}
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleAddNaics}
-                    disabled={formData.naics_codes.length >= 10 || !naicsInput}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400"
-                  >
-                    Add
-                  </button>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {formData.naics_codes.map((code) => (
-                    <span
-                      key={code}
-                      className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm flex items-center gap-2"
-                    >
-                      {code}
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveNaics(code)}
-                        className="text-blue-600 hover:text-blue-800"
-                      >
-                        ×
-                      </button>
-                    </span>
-                  ))}
-                </div>
-                {formData.naics_codes.length === 0 && (
-                  <p className="text-sm text-red-600 mt-1">At least one NAICS code is required</p>
-                )}
+            <div className={`flex items-center ${step >= 3 ? 'text-blue-600' : 'text-gray-400'}`}>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step >= 3 ? 'bg-blue-600 text-white' : 'bg-gray-300'}`}>
+                3
               </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Set-Aside Certifications (Optional)
-                </label>
-                <div className="space-y-2">
-                  {SET_ASIDES.map((setAside) => (
-                    <label key={setAside} className="flex items-center">
-                      <input
-                        type="checkbox"
-                        checked={formData.set_asides.includes(setAside)}
-                        onChange={() => handleSetAsideToggle(setAside)}
-                        className="mr-2 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                      />
-                      <span className="text-sm">{setAside}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Contract Value Range *
-                </label>
-                <div className="space-y-2">
-                  {VALUE_RANGES.map((range) => (
-                    <label key={range.label} className="flex items-center">
-                      <input
-                        type="radio"
-                        checked={
-                          formData.contract_value_min === range.min &&
-                          formData.contract_value_max === range.max
-                        }
-                        onChange={() => handleValueRangeChange(range)}
-                        className="mr-2 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
-                      />
-                      <span className="text-sm">{range.label}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
+              <span className="ml-2 text-sm font-medium">Capabilities</span>
             </div>
-          )}
-
-          {/* Step 3: Capabilities */}
-          {step === 3 && (
-            <div className="space-y-4">
-              <h2 className="text-xl font-semibold mb-4">Capabilities</h2>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Capabilities Statement * (500 words max)
-                </label>
-                <textarea
-                  name="capabilities"
-                  value={formData.capabilities}
-                  onChange={handleChange}
-                  rows={10}
-                  placeholder="Describe your company's core competencies, past performance, and unique value proposition..."
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  {formData.capabilities.split(" ").length} / 500 words
-                </p>
-              </div>
-            </div>
-          )}
-
-          {/* Navigation */}
-          <div className="flex justify-between mt-8">
-            {step > 1 ? (
-              <button
-                type="button"
-                onClick={() => setStep(step - 1)}
-                className="px-6 py-2 border border-gray-300 rounded-md hover:bg-gray-50"
-              >
-                Back
-              </button>
-            ) : (
-              <div />
-            )}
-
-            {step < 3 ? (
-              <button
-                type="button"
-                onClick={() => {
-                  if (step === 1 && !formData.name) {
-                    setError("Please fill in required fields");
-                    return;
-                  }
-                  if (step === 2 && formData.naics_codes.length === 0) {
-                    setError("Please add at least one NAICS code");
-                    return;
-                  }
-                  setError("");
-                  setStep(step + 1);
-                }}
-                className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-              >
-                Next
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={handleSubmit}
-                disabled={loading || !formData.capabilities}
-                className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400"
-              >
-                {loading ? "Creating..." : "Complete Setup"}
-              </button>
-            )}
           </div>
         </div>
+
+        <form onSubmit={handleSubmit}>
+          <Card>
+            <CardHeader>
+              <CardTitle>
+                {step === 1 && 'Company Information'}
+                {step === 2 && 'NAICS Codes & Certifications'}
+                {step === 3 && 'Capabilities & Preferences'}
+              </CardTitle>
+              <CardDescription>
+                {step === 1 && 'Tell us about your company'}
+                {step === 2 && 'Select your NAICS codes and certifications'}
+                {step === 3 && 'Describe your capabilities and preferences'}
+              </CardDescription>
+            </CardHeader>
+
+            <CardContent className="space-y-6">
+              {error && (
+                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+                  {error}
+                </div>
+              )}
+
+              {step === 1 && (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="name">Company Name *</Label>
+                    <Input
+                      id="name"
+                      type="text"
+                      value={formData.name}
+                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      required
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="legal_structure">Legal Structure</Label>
+                    <NativeSelect
+                      id="legal_structure"
+                      value={formData.legal_structure}
+                      onChange={(e) => setFormData({ ...formData, legal_structure: e.target.value })}
+                    >
+                      <option value="">Select structure...</option>
+                      {legalStructures.map((structure) => (
+                        <option key={structure} value={structure}>
+                          {structure}
+                        </option>
+                      ))}
+                    </NativeSelect>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="uei">UEI (Unique Entity Identifier)</Label>
+                    <Input
+                      id="uei"
+                      type="text"
+                      placeholder="12-character SAM.gov UEI"
+                      maxLength={12}
+                      value={formData.uei}
+                      onChange={(e) => setFormData({ ...formData, uei: e.target.value })}
+                    />
+                    <p className="text-xs text-gray-500">Your SAM.gov Unique Entity Identifier (optional)</p>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="address_street">Street Address</Label>
+                      <Input
+                        id="address_street"
+                        type="text"
+                        value={formData.address_street}
+                        onChange={(e) => setFormData({ ...formData, address_street: e.target.value })}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="address_city">City</Label>
+                      <Input
+                        id="address_city"
+                        type="text"
+                        value={formData.address_city}
+                        onChange={(e) => setFormData({ ...formData, address_city: e.target.value })}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="address_state">State</Label>
+                      <NativeSelect
+                        id="address_state"
+                        value={formData.address_state}
+                        onChange={(e) => setFormData({ ...formData, address_state: e.target.value })}
+                      >
+                        <option value="">Select state...</option>
+                        {states.map((state) => (
+                          <option key={state.code} value={state.code}>
+                            {state.name}
+                          </option>
+                        ))}
+                      </NativeSelect>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="address_zip">ZIP Code</Label>
+                      <Input
+                        id="address_zip"
+                        type="text"
+                        placeholder="12345"
+                        value={formData.address_zip}
+                        onChange={(e) => setFormData({ ...formData, address_zip: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {step === 2 && (
+                <>
+                  <div className="space-y-2">
+                    <Label>NAICS Codes * (Select up to 10)</Label>
+                    <MultiSelect
+                      options={naicsOptions}
+                      selected={formData.naics_codes}
+                      onChange={(values) => setFormData({ ...formData, naics_codes: values })}
+                      placeholder="Search and select NAICS codes..."
+                      maxItems={10}
+                    />
+                    <p className="text-xs text-gray-500">
+                      Selected: {formData.naics_codes.length}/10 - Choose the codes that best describe your business
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Set-Aside Certifications</Label>
+                    <MultiSelect
+                      options={setAsideOptions}
+                      selected={formData.set_asides}
+                      onChange={(values) => setFormData({ ...formData, set_asides: values })}
+                      placeholder="Select your certifications..."
+                    />
+                    <p className="text-xs text-gray-500">
+                      Select all that apply (8(a), WOSB, SDVOSB, HUBZone, etc.)
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="contract_range">Typical Contract Value Range</Label>
+                    <NativeSelect
+                      id="contract_range"
+                      onChange={(e) => {
+                        const range = contractRanges[parseInt(e.target.value)]
+                        if (range) {
+                          setFormData({
+                            ...formData,
+                            contract_value_min: range.min,
+                            contract_value_max: range.max
+                          })
+                        }
+                      }}
+                    >
+                      <option value="">Select range...</option>
+                      {contractRanges.map((range, index) => (
+                        <option key={range.label} value={index}>
+                          {range.label}
+                        </option>
+                      ))}
+                    </NativeSelect>
+                    <p className="text-xs text-gray-500">
+                      What size contracts do you typically pursue?
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Geographic Preferences</Label>
+                    <MultiSelect
+                      options={[
+                        { value: 'Nationwide', label: 'Nationwide' },
+                        ...stateOptions
+                      ]}
+                      selected={formData.geographic_preferences}
+                      onChange={(values) => setFormData({ ...formData, geographic_preferences: values })}
+                      placeholder="Select states or Nationwide..."
+                    />
+                    <p className="text-xs text-gray-500">
+                      Where are you willing to work?
+                    </p>
+                  </div>
+                </>
+              )}
+
+              {step === 3 && (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="capabilities">Capabilities Statement * (Max 500 words)</Label>
+                    <Textarea
+                      id="capabilities"
+                      rows={12}
+                      placeholder="Describe your company's core competencies, past performance, differentiators, and key strengths..."
+                      value={formData.capabilities}
+                      onChange={(e) => setFormData({ ...formData, capabilities: e.target.value })}
+                      required
+                    />
+                    <p className="text-xs text-gray-500">
+                      {formData.capabilities?.split(/\s+/).filter(Boolean).length || 0}/500 words
+                    </p>
+                  </div>
+
+                  <div className="bg-blue-50 border border-blue-200 rounded p-4">
+                    <h4 className="font-medium text-blue-900 mb-2">Review Your Information</h4>
+                    <div className="text-sm text-blue-800 space-y-1">
+                      <p><strong>Company:</strong> {formData.name}</p>
+                      <p><strong>NAICS Codes:</strong> {formData.naics_codes.length} selected</p>
+                      <p><strong>Certifications:</strong> {formData.set_asides.length || 'None'}</p>
+                      <p><strong>Location:</strong> {formData.address_city}, {formData.address_state || 'N/A'}</p>
+                    </div>
+                  </div>
+                </>
+              )}
+            </CardContent>
+
+            <div className="p-6 bg-gray-50 border-t flex justify-between">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={prevStep}
+                disabled={step === 1}
+              >
+                Previous
+              </Button>
+
+              {step < 3 ? (
+                <Button
+                  type="button"
+                  onClick={nextStep}
+                  disabled={
+                    (step === 1 && !formData.name) ||
+                    (step === 2 && formData.naics_codes.length === 0)
+                  }
+                >
+                  Next
+                </Button>
+              ) : (
+                <Button type="submit" disabled={loading || !formData.capabilities}>
+                  {loading ? 'Creating Profile...' : 'Complete Onboarding'}
+                </Button>
+              )}
+            </div>
+          </Card>
+        </form>
       </div>
     </div>
-  );
+  )
 }
