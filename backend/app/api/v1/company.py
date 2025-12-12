@@ -6,6 +6,10 @@ from app.schemas.auth import MessageResponse
 from app.services import company as company_service
 from app.api.deps import get_current_user
 from app.models.user import User
+from tasks.discovery import discover_opportunities_task
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -41,8 +45,18 @@ def create_company(
 
     - User can only have one company profile
     - Returns 400 if company already exists
+    - Automatically triggers opportunity discovery after creation
     """
     company = company_service.create_company(db, company_data, current_user.id)
+
+    # Trigger initial opportunity discovery for the new company
+    try:
+        logger.info(f"Triggering initial discovery for new company: {company.id}")
+        discover_opportunities_task.delay()
+    except Exception as e:
+        logger.warning(f"Failed to trigger discovery task: {e}")
+        # Don't fail company creation if task queue isn't available
+
     return company
 
 

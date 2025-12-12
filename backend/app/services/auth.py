@@ -50,15 +50,15 @@ def create_user(db: Session, user_data: UserCreate) -> User:
         last_name=user_data.last_name,
         verification_token=verification_token,
         verification_token_expires=verification_expires,
-        email_verified=False
+        email_verified=True  # Skip email verification for development
     )
 
     db.add(db_user)
     db.commit()
     db.refresh(db_user)
 
-    # Send verification email (console mode for now)
-    send_verification_email(db_user.email, verification_token)
+    # Skip verification email for development
+    # send_verification_email(db_user.email, verification_token)
 
     return db_user
 
@@ -73,11 +73,12 @@ def authenticate_user(db: Session, email: str, password: str) -> Optional[User]:
     if not verify_password(password, user.password_hash):
         return None
 
-    if not user.email_verified:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Email not verified. Please check your email for verification link."
-        )
+    # Skip email verification check for development
+    # if not user.email_verified:
+    #     raise HTTPException(
+    #         status_code=status.HTTP_403_FORBIDDEN,
+    #         detail="Email not verified. Please check your email for verification link."
+    #     )
 
     # Update last login
     user.last_login_at = datetime.utcnow()

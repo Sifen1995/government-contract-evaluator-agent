@@ -445,13 +445,19 @@ async def trigger_discovery(
         if not company:
             raise HTTPException(status_code=400, detail="Company profile required")
 
-        # Trigger evaluation task for this company
-        task = evaluate_pending_opportunities_task.delay(company.id)
-
-        return {
-            "message": "Discovery triggered successfully",
-            "task_id": task.id
-        }
+        # Run discovery synchronously (without Celery for local dev)
+        try:
+            result = evaluate_pending_opportunities_task(company.id)
+            return {
+                "message": "Discovery completed successfully",
+                "result": result
+            }
+        except Exception as task_error:
+            logger.error(f"Discovery task error: {str(task_error)}")
+            return {
+                "message": "Discovery triggered but encountered errors",
+                "error": str(task_error)
+            }
 
     except HTTPException:
         raise

@@ -5,7 +5,7 @@ gunicorn==21.2.0
 python-multipart==0.0.6
 
 # Database
-sqlalchemy==2.0.23
+sqlalchemy>=2.0.36
 pymysql==1.1.0
 cryptography==41.0.7
 alembic==1.12.1
@@ -16,9 +16,9 @@ passlib[bcrypt]==1.7.4
 python-multipart==0.0.6
 
 # Data Validation
-pydantic==2.5.0
-pydantic-settings==2.1.0
-email-validator==2.1.0
+pydantic>=2.9.0
+pydantic-settings>=2.5.0
+email-validator>=2.2.0
 
 # Task Queue
 celery==5.3.4
