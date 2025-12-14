@@ -65,7 +65,7 @@ async def list_opportunities(
         # Get total count
         query = db.query(Opportunity)
         if active_only:
-            query = query.filter(Opportunity.is_active == True)
+            query = query.filter(Opportunity.status == "active")
         if naics_codes:
             query = query.filter(Opportunity.naics_code.in_(naics_codes))
         total = query.count()
@@ -267,7 +267,7 @@ async def get_stats(
 
         active_opportunities = db.query(Opportunity).filter(
             Opportunity.naics_code.in_(company.naics_codes),
-            Opportunity.is_active == True
+            Opportunity.status == "active"
         ).count()
 
         # Get evaluation stats
@@ -433,11 +433,17 @@ async def get_pipeline_stats(
 
 @router.post("/actions/trigger-discovery")
 async def trigger_discovery(
+    force_refresh: bool = Query(False, description="Force refresh from SAM.gov even if cache is fresh"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
-    Manually trigger opportunity discovery and evaluation for user's company
+    Manually trigger opportunity discovery and evaluation for user's company.
+
+    Uses smart caching - if opportunities for your NAICS codes were fetched
+    within the last 15 minutes, it will use cached data instead of calling SAM.gov.
+
+    Set force_refresh=true to bypass the cache.
     """
     from app.services.sam_gov import sam_gov_service
     from app.services.ai_evaluator import ai_evaluator_service
@@ -455,17 +461,26 @@ async def trigger_discovery(
         try:
             discovered_count = 0
             evaluated_count = 0
+            from_cache = False
 
-            # Search SAM.gov for opportunities
-            logger.info(f"Searching SAM.gov for NAICS codes: {company.naics_codes}")
-            result = await sam_gov_service.search_opportunities(
+            # Use smart search with caching
+            logger.info(f"Smart search for NAICS codes: {company.naics_codes} (force_refresh={force_refresh})")
+            result = await sam_gov_service.search_opportunities_smart(
+                db=db,
                 naics_codes=company.naics_codes,
+                force_refresh=force_refresh,
                 active=True,
                 limit=50
             )
 
+            from_cache = result.get("from_cache", False)
             raw_opportunities = result.get("opportunities", [])
-            logger.info(f"Found {len(raw_opportunities)} opportunities from SAM.gov")
+            cached_opportunities = result.get("cached_opportunities")
+
+            if from_cache:
+                logger.info(f"Using {len(cached_opportunities) if cached_opportunities else 0} cached opportunities")
+            else:
+                logger.info(f"Found {len(raw_opportunities)} opportunities from SAM.gov")
 
             # Process each opportunity
             for raw_opp in raw_opportunities:
@@ -515,10 +530,17 @@ async def trigger_discovery(
                     logger.error(f"Error processing opportunity: {str(e)}")
                     continue
 
-            # Also evaluate any existing opportunities that haven't been evaluated yet
-            if evaluated_count == 0:
+            # If we got cached data or no new discoveries, evaluate existing unevaluated opportunities
+            opportunities_to_evaluate = []
+
+            if from_cache and cached_opportunities:
+                # Use cached opportunities for evaluation
+                opportunities_to_evaluate = cached_opportunities
+                discovered_count = len(cached_opportunities)
+            elif evaluated_count == 0:
+                # No new evaluations from discovery, check existing opportunities
                 logger.info("No new evaluations from discovery, checking existing opportunities...")
-                existing_opps = opportunity_service.list_opportunities(
+                opportunities_to_evaluate = opportunity_service.list_opportunities(
                     db,
                     skip=0,
                     limit=100,
@@ -526,37 +548,40 @@ async def trigger_discovery(
                     naics_codes=company.naics_codes
                 )
 
-                for opp in existing_opps:
-                    existing_eval = opportunity_service.get_evaluation_for_opportunity(
-                        db, opp.id, company.id
-                    )
+            # Evaluate unevaluated opportunities
+            for opp in opportunities_to_evaluate:
+                existing_eval = opportunity_service.get_evaluation_for_opportunity(
+                    db, opp.id, company.id
+                )
 
-                    if not existing_eval:
-                        try:
-                            logger.info(f"Evaluating existing opportunity: {opp.notice_id}")
-                            eval_result = await ai_evaluator_service.evaluate_opportunity(
-                                opp, company
-                            )
+                if not existing_eval:
+                    try:
+                        logger.info(f"Evaluating opportunity: {opp.source_id}")
+                        eval_result = await ai_evaluator_service.evaluate_opportunity(
+                            opp, company
+                        )
 
-                            eval_data = {
-                                "opportunity_id": opp.id,
-                                "company_id": company.id,
-                                **eval_result
-                            }
+                        eval_data = {
+                            "opportunity_id": opp.id,
+                            "company_id": company.id,
+                            **eval_result
+                        }
 
-                            opportunity_service.create_evaluation(db, eval_data)
-                            evaluated_count += 1
+                        opportunity_service.create_evaluation(db, eval_data)
+                        evaluated_count += 1
 
-                            logger.info(f"Evaluated opportunity {opp.notice_id}: {eval_result.get('recommendation')}")
+                        logger.info(f"Evaluated opportunity {opp.source_id}: {eval_result.get('recommendation')}")
 
-                        except Exception as e:
-                            logger.error(f"Error evaluating existing opportunity {opp.notice_id}: {str(e)}")
-                            continue
+                    except Exception as e:
+                        logger.error(f"Error evaluating opportunity {opp.source_id}: {str(e)}")
+                        continue
 
             return {
                 "message": "Discovery completed successfully",
                 "discovered": discovered_count,
-                "evaluated": evaluated_count
+                "evaluated": evaluated_count,
+                "from_cache": from_cache,
+                "cache_info": f"Data {'from cache' if from_cache else 'fetched from SAM.gov'}"
             }
 
         except Exception as task_error:

@@ -1,6 +1,7 @@
-from pydantic import BaseModel, EmailStr, Field
-from typing import Optional
+from pydantic import BaseModel, EmailStr, Field, field_validator
+from typing import Optional, Any
 from datetime import datetime
+from uuid import UUID
 
 
 class UserBase(BaseModel):
@@ -26,6 +27,15 @@ class UserResponse(UserBase):
     email_frequency: str
     created_at: datetime
     last_login_at: Optional[datetime] = None
+
+    @field_validator('id', 'company_id', mode='before')
+    @classmethod
+    def convert_uuid_to_str(cls, v: Any) -> Optional[str]:
+        if v is None:
+            return None
+        if isinstance(v, UUID):
+            return str(v)
+        return v
 
     class Config:
         from_attributes = True

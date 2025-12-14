@@ -29,7 +29,7 @@ class OpportunityService:
         """
         # Check if opportunity already exists
         existing = db.query(Opportunity).filter(
-            Opportunity.notice_id == opportunity_data.get("notice_id")
+            Opportunity.source_id == opportunity_data.get("source_id")
         ).first()
 
         if existing:
@@ -77,8 +77,8 @@ class OpportunityService:
         return db.query(Opportunity).filter(Opportunity.id == opportunity_id).first()
 
     def get_opportunity_by_notice_id(self, db: Session, notice_id: str) -> Optional[Opportunity]:
-        """Get opportunity by SAM.gov notice ID"""
-        return db.query(Opportunity).filter(Opportunity.notice_id == notice_id).first()
+        """Get opportunity by SAM.gov notice ID (source_id)"""
+        return db.query(Opportunity).filter(Opportunity.source_id == notice_id).first()
 
     def list_opportunities(
         self,
@@ -107,7 +107,7 @@ class OpportunityService:
 
         # Apply filters
         if active_only:
-            query = query.filter(Opportunity.is_active == True)
+            query = query.filter(Opportunity.status == "active")
 
         if naics_codes:
             query = query.filter(Opportunity.naics_code.in_(naics_codes))
@@ -146,7 +146,15 @@ class OpportunityService:
             )
             return self.update_evaluation(db, existing.id, evaluation_data)
 
-        evaluation = Evaluation(**evaluation_data)
+        # Filter evaluation_data to only include valid Evaluation model fields
+        valid_fields = {
+            'opportunity_id', 'company_id', 'fit_score', 'win_probability',
+            'recommendation', 'confidence', 'reasoning', 'strengths',
+            'weaknesses', 'executive_summary', 'evaluated_at'
+        }
+        filtered_data = {k: v for k, v in evaluation_data.items() if k in valid_fields}
+
+        evaluation = Evaluation(**filtered_data)
         db.add(evaluation)
         db.commit()
         db.refresh(evaluation)
@@ -173,12 +181,16 @@ class OpportunityService:
         if not evaluation:
             raise ValueError(f"Evaluation {evaluation_id} not found")
 
-        # Update fields
+        # Filter to valid fields and update
+        valid_fields = {
+            'fit_score', 'win_probability', 'recommendation', 'confidence',
+            'reasoning', 'strengths', 'weaknesses', 'executive_summary'
+        }
         for key, value in evaluation_data.items():
-            if hasattr(evaluation, key):
+            if key in valid_fields and hasattr(evaluation, key):
                 setattr(evaluation, key, value)
 
-        evaluation.updated_at = datetime.utcnow()
+        evaluation.evaluated_at = datetime.utcnow()
         db.commit()
         db.refresh(evaluation)
 
@@ -271,7 +283,7 @@ class OpportunityService:
         # Get active opportunities matching company's NAICS codes that haven't been evaluated
         query = db.query(Opportunity).filter(
             and_(
-                Opportunity.is_active == True,
+                Opportunity.status == "active",
                 Opportunity.naics_code.in_(company.naics_codes),
                 Opportunity.response_deadline >= datetime.utcnow(),
                 Opportunity.id.notin_(evaluated_opp_ids)
@@ -294,13 +306,7 @@ class OpportunityService:
         cutoff_date = datetime.utcnow() - timedelta(days=days_old)
 
         count = db.query(Opportunity).filter(
-            or_(
-                Opportunity.archive_date < cutoff_date,
-                and_(
-                    Opportunity.response_deadline < cutoff_date,
-                    Opportunity.archive_date.is_(None)
-                )
-            )
+            Opportunity.response_deadline < cutoff_date
         ).delete()
 
         db.commit()

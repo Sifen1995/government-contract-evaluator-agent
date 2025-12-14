@@ -1,13 +1,17 @@
 """
 SAM.gov API integration service for discovering government contract opportunities
 """
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple
 import httpx
 from datetime import datetime, timedelta
 from app.core.config import settings
 import logging
 
 logger = logging.getLogger(__name__)
+
+# Default cache duration in minutes
+DEFAULT_CACHE_MINUTES = 15
+
 
 class SAMGovService:
     """Service for interacting with SAM.gov API"""
@@ -18,6 +22,120 @@ class SAMGovService:
         self.api_key = api_key or settings.SAM_API_KEY
         if not self.api_key:
             logger.warning("SAM.gov API key not configured. Using public access (limited rate).")
+
+    def check_cache_freshness(
+        self,
+        db,
+        naics_codes: List[str],
+        cache_minutes: int = DEFAULT_CACHE_MINUTES
+    ) -> Tuple[bool, Optional[datetime], int]:
+        """
+        Check if we have fresh opportunity data for the given NAICS codes.
+
+        Args:
+            db: Database session
+            naics_codes: List of NAICS codes to check
+            cache_minutes: How many minutes before data is considered stale
+
+        Returns:
+            Tuple of (is_fresh, last_sync_time, opportunity_count)
+        """
+        from sqlalchemy import func
+        from app.models.opportunity import Opportunity
+
+        if not naics_codes:
+            return False, None, 0
+
+        # Get the most recent update time for opportunities with these NAICS codes
+        result = db.query(
+            func.max(Opportunity.updated_at).label("last_sync"),
+            func.count(Opportunity.id).label("count")
+        ).filter(
+            Opportunity.naics_code.in_(naics_codes),
+            Opportunity.status == "active"
+        ).first()
+
+        last_sync = result.last_sync if result else None
+        count = result.count if result else 0
+
+        if not last_sync:
+            logger.info(f"No cached opportunities found for NAICS codes: {naics_codes}")
+            return False, None, 0
+
+        # Check if data is still fresh
+        # Handle timezone-aware vs naive datetimes
+        cache_cutoff = datetime.utcnow() - timedelta(minutes=cache_minutes)
+
+        # Make last_sync timezone-naive for comparison if needed
+        last_sync_naive = last_sync.replace(tzinfo=None) if last_sync.tzinfo else last_sync
+        is_fresh = last_sync_naive > cache_cutoff
+
+        if is_fresh:
+            logger.info(
+                f"Cache HIT: {count} opportunities for NAICS {naics_codes} "
+                f"(last sync: {last_sync_naive.strftime('%Y-%m-%d %H:%M:%S')})"
+            )
+        else:
+            minutes_old = (datetime.utcnow() - last_sync_naive).total_seconds() / 60
+            logger.info(
+                f"Cache STALE: Data for NAICS {naics_codes} is {minutes_old:.1f} minutes old"
+            )
+
+        return is_fresh, last_sync, count
+
+    async def search_opportunities_smart(
+        self,
+        db,
+        naics_codes: Optional[List[str]] = None,
+        force_refresh: bool = False,
+        cache_minutes: int = DEFAULT_CACHE_MINUTES,
+        **kwargs
+    ) -> Dict:
+        """
+        Smart search that checks cache before calling SAM.gov API.
+
+        Args:
+            db: Database session
+            naics_codes: List of NAICS codes to filter by
+            force_refresh: If True, bypass cache and always call SAM.gov
+            cache_minutes: How many minutes before data is considered stale
+            **kwargs: Additional arguments passed to search_opportunities
+
+        Returns:
+            Dict with 'opportunities', 'total_count', 'from_cache', 'last_sync'
+        """
+        from app.models.opportunity import Opportunity
+
+        # Check cache freshness (unless force refresh)
+        if not force_refresh and naics_codes:
+            is_fresh, last_sync, count = self.check_cache_freshness(db, naics_codes, cache_minutes)
+
+            if is_fresh and count > 0:
+                # Return cached data from database
+                logger.info(f"Using cached opportunities from database ({count} records)")
+
+                # Fetch opportunities from DB
+                opportunities = db.query(Opportunity).filter(
+                    Opportunity.naics_code.in_(naics_codes),
+                    Opportunity.status == "active"
+                ).all()
+
+                return {
+                    "opportunities": [],  # Empty - no new raw data to process
+                    "total_count": count,
+                    "from_cache": True,
+                    "last_sync": last_sync,
+                    "cached_opportunities": opportunities
+                }
+
+        # Cache miss or force refresh - call SAM.gov API
+        logger.info(f"Cache MISS or force_refresh={force_refresh}: Calling SAM.gov API")
+        result = await self.search_opportunities(naics_codes=naics_codes, **kwargs)
+        result["from_cache"] = False
+        result["last_sync"] = datetime.utcnow()
+        result["cached_opportunities"] = None
+
+        return result
 
     async def search_opportunities(
         self,

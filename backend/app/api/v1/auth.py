@@ -79,8 +79,8 @@ def login(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # Create access token
-    access_token = create_access_token(data={"sub": user.id})
+    # Create access token (convert UUID to string for JSON serialization)
+    access_token = create_access_token(data={"sub": str(user.id)})
 
     return LoginResponse(
         access_token=access_token,

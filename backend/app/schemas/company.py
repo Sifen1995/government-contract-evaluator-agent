@@ -1,7 +1,8 @@
-from pydantic import BaseModel
-from typing import Optional, List
+from pydantic import BaseModel, field_validator
+from typing import Optional, List, Any
 from datetime import datetime
 from decimal import Decimal
+from uuid import UUID
 
 
 class CompanyBase(BaseModel):
@@ -32,6 +33,15 @@ class CompanyResponse(CompanyBase):
     id: str
     created_at: datetime
     updated_at: datetime
+
+    @field_validator('id', mode='before')
+    @classmethod
+    def convert_uuid_to_str(cls, v: Any) -> Optional[str]:
+        if v is None:
+            return None
+        if isinstance(v, UUID):
+            return str(v)
+        return v
 
     class Config:
         from_attributes = True
