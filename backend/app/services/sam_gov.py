@@ -44,53 +44,75 @@ class SAMGovService:
         Returns:
             Dict with 'opportunities' list and 'total_count'
         """
-        params = {
-            "api_key": self.api_key,
-            "limit": min(limit, 100),
+        all_opportunities = []
+        total_count = 0
+
+        # SAM.gov API doesn't support multiple NAICS codes in one request
+        # Make separate requests for each NAICS code
+        codes_to_search = naics_codes[:10] if naics_codes else [None]
+
+        for naics_code in codes_to_search:
+            params = {
+                "api_key": self.api_key,
+                "limit": min(limit, 100),
+                "offset": offset,
+                "postedFrom": (posted_from or (datetime.utcnow() - timedelta(days=30))).strftime("%m/%d/%Y"),
+                "postedTo": (posted_to or datetime.utcnow()).strftime("%m/%d/%Y"),
+            }
+
+            # Add single NAICS filter
+            if naics_code:
+                params["ncode"] = naics_code
+
+            # Add set-aside filter
+            if set_aside:
+                params["typeOfSetAside"] = set_aside
+
+            # Note: active=true filter often returns 0 results, so we skip it
+            # and filter by response_deadline instead
+
+            try:
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    logger.info(f"Fetching opportunities for NAICS {naics_code} from SAM.gov...")
+                    response = await client.get(self.BASE_URL, params=params)
+                    response.raise_for_status()
+                    data = response.json()
+
+                    opportunities = data.get("opportunitiesData", [])
+                    count = data.get("totalRecords", 0)
+
+                    logger.info(f"Fetched {len(opportunities)} opportunities for NAICS {naics_code} (total: {count})")
+
+                    all_opportunities.extend(opportunities)
+                    total_count += count
+
+            except httpx.HTTPStatusError as e:
+                logger.error(f"SAM.gov API HTTP error for NAICS {naics_code}: {e.response.status_code} - {e.response.text}")
+                continue
+            except httpx.RequestError as e:
+                logger.error(f"SAM.gov API request error for NAICS {naics_code}: {str(e)}")
+                continue
+            except Exception as e:
+                logger.error(f"Unexpected error fetching NAICS {naics_code} from SAM.gov: {str(e)}")
+                continue
+
+        # Deduplicate by notice_id
+        seen = set()
+        unique_opportunities = []
+        for opp in all_opportunities:
+            notice_id = opp.get("noticeId")
+            if notice_id and notice_id not in seen:
+                seen.add(notice_id)
+                unique_opportunities.append(opp)
+
+        logger.info(f"Total unique opportunities fetched: {len(unique_opportunities)}")
+
+        return {
+            "opportunities": unique_opportunities,
+            "total_count": len(unique_opportunities),
             "offset": offset,
-            "postedFrom": (posted_from or (datetime.utcnow() - timedelta(days=7))).strftime("%m/%d/%Y"),
-            "postedTo": (posted_to or datetime.utcnow()).strftime("%m/%d/%Y"),
+            "limit": limit
         }
-
-        # Add NAICS filter
-        if naics_codes:
-            params["ncode"] = ",".join(naics_codes[:10])  # Max 10 NAICS codes
-
-        # Add set-aside filter
-        if set_aside:
-            params["typeOfSetAside"] = set_aside
-
-        # Active opportunities only
-        if active:
-            params["active"] = "true"
-
-        try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.get(self.BASE_URL, params=params)
-                response.raise_for_status()
-                data = response.json()
-
-                opportunities = data.get("opportunitiesData", [])
-                total_count = data.get("totalRecords", 0)
-
-                logger.info(f"Fetched {len(opportunities)} opportunities from SAM.gov (total: {total_count})")
-
-                return {
-                    "opportunities": opportunities,
-                    "total_count": total_count,
-                    "offset": offset,
-                    "limit": limit
-                }
-
-        except httpx.HTTPStatusError as e:
-            logger.error(f"SAM.gov API HTTP error: {e.response.status_code} - {e.response.text}")
-            raise Exception(f"SAM.gov API error: {e.response.status_code}")
-        except httpx.RequestError as e:
-            logger.error(f"SAM.gov API request error: {str(e)}")
-            raise Exception(f"SAM.gov API request failed: {str(e)}")
-        except Exception as e:
-            logger.error(f"Unexpected error fetching from SAM.gov: {str(e)}")
-            raise
 
     def parse_opportunity(self, raw_data: Dict) -> Dict:
         """

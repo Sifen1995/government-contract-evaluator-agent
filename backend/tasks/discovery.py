@@ -9,6 +9,13 @@ from app.services.ai_evaluator import ai_evaluator_service
 from app.services.opportunity import opportunity_service
 import asyncio
 import logging
+import nest_asyncio
+
+# Allow nested event loops (needed when called from async context)
+try:
+    nest_asyncio.apply()
+except:
+    pass
 
 logger = logging.getLogger(__name__)
 

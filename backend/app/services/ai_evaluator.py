@@ -22,7 +22,7 @@ class AIEvaluatorService:
             raise ValueError("OpenAI API key not configured")
 
         self.client = AsyncOpenAI(api_key=self.api_key)
-        self.model = "gpt-4"  # Use GPT-4 for best quality
+        self.model = "gpt-4-turbo-preview"  # Use GPT-4 Turbo for JSON mode support
 
     async def evaluate_opportunity(
         self,

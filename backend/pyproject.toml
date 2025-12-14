@@ -1,0 +1,59 @@
+[tool.poetry]
+name = "govai-backend"
+version = "1.0.0"
+description = "GovAI - AI-powered government contract discovery platform"
+authors = ["GovAI Team"]
+package-mode = false
+
+[tool.poetry.dependencies]
+python = "^3.9"
+
+# FastAPI Framework
+fastapi = "^0.104.1"
+uvicorn = {extras = ["standard"], version = "^0.24.0"}
+gunicorn = "^21.2.0"
+python-multipart = "^0.0.6"
+
+# Database
+sqlalchemy = "^2.0.36"
+pymysql = "^1.1.0"
+cryptography = "^41.0.7"
+alembic = "^1.12.1"
+
+# Authentication & Security
+python-jose = {extras = ["cryptography"], version = "^3.3.0"}
+passlib = {extras = ["bcrypt"], version = "^1.7.4"}
+
+# Data Validation
+pydantic = "^2.9.0"
+pydantic-settings = "^2.5.0"
+email-validator = "^2.2.0"
+
+# Task Queue
+celery = "^5.3.4"
+redis = "^5.0.1"
+
+# HTTP Client
+httpx = "^0.25.2"
+
+# Email
+sendgrid = "^6.11.0"
+
+# AI
+openai = "^1.52.0"
+
+# Rate Limiting
+slowapi = "^0.1.9"
+
+# Utilities
+python-dotenv = "^1.0.0"
+nest-asyncio = "^1.6.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.4.0"
+pytest-asyncio = "^0.21.0"
+httpx = "^0.25.2"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

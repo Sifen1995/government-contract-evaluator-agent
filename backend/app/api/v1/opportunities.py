@@ -21,7 +21,7 @@ from app.schemas.opportunity import (
 )
 from app.services.opportunity import opportunity_service
 from app.services.company import get_user_company
-from tasks.discovery import evaluate_pending_opportunities_task
+from tasks.discovery import evaluate_pending_opportunities_task, discover_opportunities_task
 import logging
 
 logger = logging.getLogger(__name__)
@@ -439,19 +439,126 @@ async def trigger_discovery(
     """
     Manually trigger opportunity discovery and evaluation for user's company
     """
+    from app.services.sam_gov import sam_gov_service
+    from app.services.ai_evaluator import ai_evaluator_service
+
     try:
         # Get company
         company = get_user_company(db, current_user.id)
         if not company:
             raise HTTPException(status_code=400, detail="Company profile required")
 
-        # Run discovery synchronously (without Celery for local dev)
+        if not company.naics_codes:
+            raise HTTPException(status_code=400, detail="Company NAICS codes required")
+
+        # Run discovery directly (async)
         try:
-            result = evaluate_pending_opportunities_task(company.id)
+            discovered_count = 0
+            evaluated_count = 0
+
+            # Search SAM.gov for opportunities
+            logger.info(f"Searching SAM.gov for NAICS codes: {company.naics_codes}")
+            result = await sam_gov_service.search_opportunities(
+                naics_codes=company.naics_codes,
+                active=True,
+                limit=50
+            )
+
+            raw_opportunities = result.get("opportunities", [])
+            logger.info(f"Found {len(raw_opportunities)} opportunities from SAM.gov")
+
+            # Process each opportunity
+            for raw_opp in raw_opportunities:
+                try:
+                    # Parse opportunity data
+                    opp_data = sam_gov_service.parse_opportunity(raw_opp)
+
+                    # Create or update opportunity
+                    opportunity = opportunity_service.create_opportunity(db, opp_data)
+                    discovered_count += 1
+
+                    # Check if company's NAICS codes match this opportunity
+                    logger.info(f"Checking opportunity {opportunity.notice_id}: NAICS={opportunity.naics_code}, Company NAICS={company.naics_codes}")
+                    if opportunity.naics_code and opportunity.naics_code in company.naics_codes:
+                        # Check if already evaluated
+                        existing_eval = opportunity_service.get_evaluation_for_opportunity(
+                            db, opportunity.id, company.id
+                        )
+
+                        if not existing_eval:
+                            # Evaluate this opportunity for this company
+                            try:
+                                eval_result = await ai_evaluator_service.evaluate_opportunity(
+                                    opportunity, company
+                                )
+
+                                # Save evaluation
+                                eval_data = {
+                                    "opportunity_id": opportunity.id,
+                                    "company_id": company.id,
+                                    **eval_result
+                                }
+
+                                opportunity_service.create_evaluation(db, eval_data)
+                                evaluated_count += 1
+
+                                logger.info(
+                                    f"Evaluated opportunity {opportunity.notice_id}: "
+                                    f"{eval_result.get('recommendation')}"
+                                )
+
+                            except Exception as e:
+                                logger.error(f"Error evaluating opportunity {opportunity.notice_id}: {str(e)}")
+                                continue
+
+                except Exception as e:
+                    logger.error(f"Error processing opportunity: {str(e)}")
+                    continue
+
+            # Also evaluate any existing opportunities that haven't been evaluated yet
+            if evaluated_count == 0:
+                logger.info("No new evaluations from discovery, checking existing opportunities...")
+                existing_opps = opportunity_service.list_opportunities(
+                    db,
+                    skip=0,
+                    limit=100,
+                    active_only=True,
+                    naics_codes=company.naics_codes
+                )
+
+                for opp in existing_opps:
+                    existing_eval = opportunity_service.get_evaluation_for_opportunity(
+                        db, opp.id, company.id
+                    )
+
+                    if not existing_eval:
+                        try:
+                            logger.info(f"Evaluating existing opportunity: {opp.notice_id}")
+                            eval_result = await ai_evaluator_service.evaluate_opportunity(
+                                opp, company
+                            )
+
+                            eval_data = {
+                                "opportunity_id": opp.id,
+                                "company_id": company.id,
+                                **eval_result
+                            }
+
+                            opportunity_service.create_evaluation(db, eval_data)
+                            evaluated_count += 1
+
+                            logger.info(f"Evaluated opportunity {opp.notice_id}: {eval_result.get('recommendation')}")
+
+                        except Exception as e:
+                            logger.error(f"Error evaluating existing opportunity {opp.notice_id}: {str(e)}")
+                            continue
+
             return {
                 "message": "Discovery completed successfully",
-                "result": result
+                "discovered": discovered_count,
+                "evaluated": evaluated_count
             }
+
         except Exception as task_error:
             logger.error(f"Discovery task error: {str(task_error)}")
             return {
