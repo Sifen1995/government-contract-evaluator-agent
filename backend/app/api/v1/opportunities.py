@@ -21,7 +21,6 @@ from app.schemas.opportunity import (
 )
 from app.services.opportunity import opportunity_service
 from app.services.company import get_user_company
-from tasks.discovery import evaluate_pending_opportunities_task, discover_opportunities_task
 import logging
 
 logger = logging.getLogger(__name__)

@@ -7,7 +7,6 @@ from slowapi.errors import RateLimitExceeded
 from app.core.config import settings
 from app.core.database import SessionLocal
 from app.api.v1 import api_router
-import redis
 import logging
 
 logger = logging.getLogger(__name__)
@@ -72,14 +71,13 @@ def health_check():
 def detailed_health_check():
     """
     Detailed health check endpoint.
-    Checks database and Redis connectivity.
+    Checks database connectivity.
     """
     health_status = {
         "status": "healthy",
         "checks": {
             "api": "ok",
             "database": "unknown",
-            "redis": "unknown",
         }
     }
 
@@ -94,15 +92,6 @@ def detailed_health_check():
         health_status["checks"]["database"] = f"error: {str(e)}"
         health_status["status"] = "degraded"
 
-    # Check Redis
-    try:
-        r = redis.from_url(settings.REDIS_URL)
-        r.ping()
-        health_status["checks"]["redis"] = "ok"
-    except Exception as e:
-        health_status["checks"]["redis"] = f"error: {str(e)}"
-        health_status["status"] = "degraded"
-
     return health_status
 
 
@@ -114,13 +103,10 @@ def readiness_check():
     """
     try:
         # Check database
+        from sqlalchemy import text
         db = SessionLocal()
-        db.execute("SELECT 1")
+        db.execute(text("SELECT 1"))
         db.close()
-
-        # Check Redis
-        r = redis.from_url(settings.REDIS_URL)
-        r.ping()
 
         return {"ready": True}
     except Exception as e:

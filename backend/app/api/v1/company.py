@@ -6,7 +6,6 @@ from app.schemas.auth import MessageResponse
 from app.services import company as company_service
 from app.api.deps import get_current_user
 from app.models.user import User
-from tasks.discovery import discover_opportunities_task
 import logging
 
 logger = logging.getLogger(__name__)
@@ -49,13 +48,8 @@ def create_company(
     """
     company = company_service.create_company(db, company_data, current_user.id)
 
-    # Trigger initial opportunity discovery for the new company
-    try:
-        logger.info(f"Triggering initial discovery for new company: {company.id}")
-        discover_opportunities_task.delay()
-    except Exception as e:
-        logger.warning(f"Failed to trigger discovery task: {e}")
-        # Don't fail company creation if task queue isn't available
+    # Note: Initial opportunity discovery will happen on next cron job run (every 15 min)
+    logger.info(f"Company created: {company.id}. Discovery will run on next scheduled job.")
 
     return company
 

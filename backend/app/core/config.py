@@ -15,9 +15,6 @@ class Settings(BaseSettings):
     # Database
     DATABASE_URL: str
 
-    # Redis
-    REDIS_URL: str
-
     # JWT Authentication
     JWT_SECRET: str
     JWT_ALGORITHM: str = "HS256"
@@ -35,11 +32,7 @@ class Settings(BaseSettings):
     EMAIL_FROM: str = "noreply@govai.com"
     SENDGRID_API_KEY: str = ""
 
-    # Celery
-    CELERY_BROKER_URL: str
-    CELERY_RESULT_BACKEND: str
-
-    # External APIs (Week 2+)
+    # External APIs
     SAM_API_KEY: str = ""
     OPENAI_API_KEY: str = ""
 
