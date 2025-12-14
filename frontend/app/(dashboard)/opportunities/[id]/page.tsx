@@ -335,11 +335,14 @@ export default function OpportunityDetailPage() {
 
                 {opportunity.link && (
                   <div>
-                    <Button asChild variant="outline" className="w-full">
-                      <a href={opportunity.link} target="_blank" rel="noopener noreferrer">
-                        View on SAM.gov →
-                      </a>
-                    </Button>
+                    <a
+                      href={opportunity.link}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors border border-input hover:bg-accent hover:text-accent-foreground h-10 py-2 px-4 w-full"
+                    >
+                      View on SAM.gov →
+                    </a>
                   </div>
                 )}
               </CardContent>

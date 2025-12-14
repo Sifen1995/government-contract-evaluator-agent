@@ -128,7 +128,7 @@ export function MultiSelect({
             ) : (
               filteredOptions.map((option) => {
                 const isSelected = selected.includes(option.value)
-                const isDisabled = maxItems && !isSelected && selected.length >= maxItems
+                const isDisabled = Boolean(maxItems && !isSelected && selected.length >= maxItems)
 
                 return (
                   <div
