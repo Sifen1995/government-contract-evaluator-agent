@@ -70,3 +70,12 @@ htmlcov/
 
 # Claude Code
 .claude/
+
+# Playwright MCP screenshots
+.playwright-mcp/
+
+# Celery runtime files
+celerybeat-schedule
+celerybeat-schedule-shm
+celerybeat-schedule-wal
+celerybeat.pid
