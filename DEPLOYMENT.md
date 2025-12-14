@@ -1,118 +1,238 @@
 # GovAI Production Deployment Guide
 
-This guide covers deploying GovAI to a production environment.
+Deploy GovAI to EC2 with native Python (no Docker/Redis/Celery).
+
+## Overview
+
+| Component | Deployment |
+|-----------|------------|
+| Backend API | EC2 + systemd + gunicorn |
+| Scheduled Tasks | Cron jobs |
+| Database | AWS RDS PostgreSQL |
+| Frontend | S3 + CloudFront (static) |
 
 ## Prerequisites
 
-- Linux server (Ubuntu 20.04+ recommended)
-- Docker and Docker Compose installed
-- Domain name with DNS configured
-- SSL certificate (Let's Encrypt recommended)
-- API keys ready:
+- EC2 instance (t3a.large or larger recommended)
+- RDS PostgreSQL database
+- Python 3.9+ on EC2
+- SSH access to EC2
+- API keys:
   - SAM.gov API key
   - OpenAI API key
-  - SendGrid API key (for emails)
+  - SendGrid API key (for production emails)
 
-## Quick Start
+## Quick Deployment
 
-### 1. Clone the Repository
-
-```bash
-git clone <your-repo-url>
-cd government-contract-evaluator-agent-main
-```
-
-### 2. Configure Environment Variables
+### 1. Configure Environment
 
 ```bash
 # Copy production environment template
-cp .env.production.example .env
+cp backend/.env.production.example backend/.env.production
 
 # Edit with your production values
-nano .env
+nano backend/.env.production
 ```
 
-**Critical settings to update:**
-- `MYSQL_ROOT_PASSWORD` - Strong database root password
-- `MYSQL_PASSWORD` - Strong database user password
-- `JWT_SECRET` - Generate with `openssl rand -hex 32`
-- `API_URL` - Your API domain (e.g., https://api.yourdomain.com)
-- `FRONTEND_URL` - Your frontend domain (e.g., https://yourdomain.com)
-- `CORS_ORIGINS` - Your frontend domain
-- `SENDGRID_API_KEY` - Your SendGrid API key
-- `SAM_API_KEY` - Your SAM.gov API key
-- `OPENAI_API_KEY` - Your OpenAI API key
-- `DEBUG=false` - **Important!**
-
-### 3. Generate Secure Secrets
-
+**Required settings:**
 ```bash
-# Generate JWT secret
-openssl rand -hex 32
+# Database - Your RDS endpoint
+DATABASE_URL=postgresql://user:password@your-rds.amazonaws.com:5432/govai
 
-# Generate database passwords
-openssl rand -base64 24
+# JWT - Generate with: openssl rand -hex 32
+JWT_SECRET=your_64_character_secret
+
+# URLs
+API_URL=http://your-ec2-ip:8000
+FRONTEND_URL=https://your-cloudfront-domain.com
+CORS_ORIGINS=https://your-cloudfront-domain.com
+
+# Email
+EMAIL_MODE=sendgrid
+SENDGRID_API_KEY=your_sendgrid_key
+
+# APIs
+SAM_API_KEY=your_sam_gov_key
+OPENAI_API_KEY=your_openai_key
+
+# Production
+DEBUG=false
 ```
 
-### 4. Deploy with Docker Compose
+### 2. Deploy to EC2
 
 ```bash
-# Build and start all services
-docker-compose -f docker-compose.prod.yml up -d --build
+# Full deployment (first time)
+./deploy.sh
+
+# Quick deployment (code updates only)
+./deploy-quick.sh
+```
+
+The deploy script will:
+1. Upload backend code to `/opt/govai/backend`
+2. Create Python virtual environment
+3. Install dependencies
+4. Run database migrations
+5. Install systemd service
+6. Setup cron jobs
+7. Start the API
+
+### 3. Verify Deployment
+
+```bash
+# SSH to server
+ssh ubuntu@your-ec2-ip
+
+# Check service status
+sudo systemctl status govai-api
+
+# Check logs
+sudo journalctl -u govai-api -f
+
+# Test health endpoint
+curl http://localhost:8000/health
+curl http://localhost:8000/health/detailed
+```
+
+## Service Management
+
+### Backend API
+
+```bash
+# Start/Stop/Restart
+sudo systemctl start govai-api
+sudo systemctl stop govai-api
+sudo systemctl restart govai-api
 
 # View logs
-docker-compose -f docker-compose.prod.yml logs -f
+sudo journalctl -u govai-api -f
+sudo journalctl -u govai-api -n 100 --no-pager
 
-# Run database migrations
-docker-compose -f docker-compose.prod.yml exec backend alembic upgrade head
+# Enable on boot
+sudo systemctl enable govai-api
 ```
 
-### 5. Verify Deployment
+### Cron Jobs (Scheduled Tasks)
 
 ```bash
-# Check health endpoint
-curl https://api.yourdomain.com/health
+# View installed cron jobs
+crontab -l
 
-# Check detailed health
-curl https://api.yourdomain.com/health/detailed
+# Edit cron jobs
+crontab -e
 
-# Check readiness
-curl https://api.yourdomain.com/ready
+# View cron logs
+tail -f /var/log/govai/discovery.log
+tail -f /var/log/govai/email.log
 ```
 
-## Nginx Reverse Proxy Setup
+**Scheduled tasks:**
+| Task | Schedule | Log |
+|------|----------|-----|
+| Discover opportunities | Every 15 min | `/var/log/govai/discovery.log` |
+| Daily digest emails | 8 AM UTC | `/var/log/govai/email.log` |
+| Deadline reminders | 9 AM UTC | `/var/log/govai/email.log` |
+| Cleanup old opportunities | 2 AM UTC | `/var/log/govai/cleanup.log` |
 
-### Install Nginx
+### Manual Task Execution
 
 ```bash
-sudo apt update
+# SSH to server
+ssh ubuntu@your-ec2-ip
+
+# Run discovery manually
+cd /opt/govai/backend
+source ../venv/bin/activate
+python scripts/discover_opportunities.py
+
+# Run other tasks
+python scripts/send_daily_digest.py
+python scripts/send_deadline_reminders.py
+python scripts/cleanup_opportunities.py
+```
+
+## Database Migrations
+
+```bash
+# SSH to server
+ssh ubuntu@your-ec2-ip
+
+# Run migrations
+cd /opt/govai/backend
+source ../venv/bin/activate
+alembic upgrade head
+
+# Check migration status
+alembic current
+
+# Rollback
+alembic downgrade -1
+```
+
+## Directory Structure on EC2
+
+```
+/opt/govai/
+├── backend/           # Application code
+│   ├── app/          # FastAPI application
+│   ├── scripts/      # Cron job scripts
+│   ├── alembic/      # Database migrations
+│   └── .env          # Environment variables
+├── venv/             # Python virtual environment
+└── logs/             # Application logs (optional)
+
+/var/log/govai/       # Cron job logs
+├── discovery.log
+├── email.log
+└── cleanup.log
+```
+
+## Frontend Deployment (S3 + CloudFront)
+
+### Build Static Export
+
+```bash
+cd frontend
+
+# Update .env.production with API URL
+echo "NEXT_PUBLIC_API_URL=http://your-ec2-ip:8000" > .env.production
+
+# Build static export
+npm run build
+```
+
+### Upload to S3
+
+```bash
+# Create S3 bucket
+aws s3 mb s3://govai-frontend
+
+# Upload built files
+aws s3 sync out/ s3://govai-frontend --delete
+
+# Configure bucket for static hosting
+aws s3 website s3://govai-frontend --index-document index.html --error-document 404.html
+```
+
+### Configure CloudFront
+
+1. Create CloudFront distribution with S3 origin
+2. Set default root object to `index.html`
+3. Configure custom error pages for SPA routing
+4. Enable HTTPS with ACM certificate
+
+## Nginx Reverse Proxy (Optional)
+
+If you want HTTPS on the backend:
+
+```bash
 sudo apt install nginx certbot python3-certbot-nginx
 ```
-
-### Configure Nginx
 
 Create `/etc/nginx/sites-available/govai`:
 
 ```nginx
-# Frontend
-server {
-    listen 80;
-    server_name yourdomain.com;
-
-    location / {
-        proxy_pass http://localhost:3000;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_cache_bypass $http_upgrade;
-    }
-}
-
-# Backend API
 server {
     listen 80;
     server_name api.yourdomain.com;
@@ -120,223 +240,123 @@ server {
     location / {
         proxy_pass http://localhost:8000;
         proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_cache_bypass $http_upgrade;
-
-        # Increase timeouts for long-running requests
         proxy_connect_timeout 60s;
-        proxy_send_timeout 60s;
         proxy_read_timeout 60s;
     }
 }
 ```
 
-### Enable Site and SSL
-
 ```bash
 # Enable site
 sudo ln -s /etc/nginx/sites-available/govai /etc/nginx/sites-enabled/
-
-# Test configuration
 sudo nginx -t
-
-# Restart Nginx
 sudo systemctl restart nginx
 
 # Get SSL certificate
-sudo certbot --nginx -d yourdomain.com -d api.yourdomain.com
-```
-
-## Database Backup
-
-### Manual Backup
-
-```bash
-# Create backup
-docker-compose -f docker-compose.prod.yml exec mysql mysqldump -u root -p govai > backup_$(date +%Y%m%d).sql
-
-# Restore backup
-docker-compose -f docker-compose.prod.yml exec -T mysql mysql -u root -p govai < backup_20240101.sql
-```
-
-### Automated Backups
-
-Create `/etc/cron.daily/govai-backup`:
-
-```bash
-#!/bin/bash
-BACKUP_DIR="/var/backups/govai"
-DATE=$(date +%Y%m%d_%H%M%S)
-mkdir -p $BACKUP_DIR
-
-# Database backup
-docker-compose -f /path/to/govai/docker-compose.prod.yml exec -T mysql mysqldump -u root -p$MYSQL_ROOT_PASSWORD govai > $BACKUP_DIR/db_$DATE.sql
-
-# Compress
-gzip $BACKUP_DIR/db_$DATE.sql
-
-# Remove backups older than 30 days
-find $BACKUP_DIR -name "*.gz" -mtime +30 -delete
+sudo certbot --nginx -d api.yourdomain.com
 ```
 
 ## Monitoring
 
-### Health Checks
+### Health Endpoints
 
-- `/health` - Basic health check (always returns 200 if API is up)
-- `/health/detailed` - Checks database and Redis connectivity
-- `/ready` - Readiness check (returns 503 if dependencies are down)
+- `/health` - Basic health (API is up)
+- `/health/detailed` - Database connectivity check
+- `/ready` - Readiness for load balancer
 
-### View Logs
+### Log Monitoring
 
 ```bash
-# All services
-docker-compose -f docker-compose.prod.yml logs -f
+# API logs
+sudo journalctl -u govai-api -f
 
-# Specific service
-docker-compose -f docker-compose.prod.yml logs -f backend
-docker-compose -f docker-compose.prod.yml logs -f celery-worker
+# Cron logs
+tail -f /var/log/govai/*.log
 
-# Last 100 lines
-docker-compose -f docker-compose.prod.yml logs --tail=100 backend
+# All logs combined
+sudo journalctl -u govai-api -f & tail -f /var/log/govai/*.log
 ```
 
-### Resource Monitoring
+### Server Resources
 
 ```bash
-# Container stats
-docker stats
+# Memory usage
+free -h
 
 # Disk usage
-docker system df
-```
+df -h
 
-## Scaling
-
-### Horizontal Scaling (Multiple Workers)
-
-Edit `docker-compose.prod.yml` to add more Celery workers:
-
-```yaml
-celery-worker-2:
-  build:
-    context: ./backend
-    dockerfile: Dockerfile.prod
-  container_name: govai-celery-worker-2
-  # ... same config as celery-worker
-```
-
-### Vertical Scaling
-
-Adjust resource limits in `docker-compose.prod.yml`:
-
-```yaml
-deploy:
-  resources:
-    limits:
-      memory: 2G  # Increase as needed
-    reservations:
-      memory: 512M
+# Process monitoring
+htop
 ```
 
 ## Troubleshooting
 
-### Container Won't Start
+### Service Won't Start
 
 ```bash
 # Check logs
-docker-compose -f docker-compose.prod.yml logs backend
+sudo journalctl -u govai-api -n 50 --no-pager
 
-# Check container status
-docker-compose -f docker-compose.prod.yml ps
-
-# Restart specific service
-docker-compose -f docker-compose.prod.yml restart backend
+# Common issues:
+# - Missing .env file
+# - Invalid DATABASE_URL
+# - Port already in use
 ```
 
-### Database Connection Issues
+### Database Connection Failed
 
 ```bash
-# Check MySQL is running
-docker-compose -f docker-compose.prod.yml exec mysql mysql -u root -p -e "SELECT 1"
-
-# Check connection from backend
-docker-compose -f docker-compose.prod.yml exec backend python -c "from app.core.database import engine; print(engine.connect())"
+# Test connection manually
+cd /opt/govai/backend
+source ../venv/bin/activate
+python -c "from app.core.database import engine; engine.connect(); print('OK')"
 ```
 
-### Celery Tasks Not Running
+### Cron Jobs Not Running
 
 ```bash
-# Check worker logs
-docker-compose -f docker-compose.prod.yml logs celery-worker
+# Check cron service
+sudo systemctl status cron
 
-# Check beat scheduler logs
-docker-compose -f docker-compose.prod.yml logs celery-beat
+# Check cron logs
+grep CRON /var/log/syslog
 
-# Verify Redis connection
-docker-compose -f docker-compose.prod.yml exec redis redis-cli ping
+# Test script manually
+cd /opt/govai/backend
+source ../venv/bin/activate
+python scripts/discover_opportunities.py
 ```
-
-### Email Not Sending
-
-1. Verify `EMAIL_MODE=sendgrid` in `.env`
-2. Check SendGrid API key is valid
-3. Verify sender email is verified in SendGrid
-4. Check backend logs for email errors
 
 ## Security Checklist
 
 - [ ] `DEBUG=false` in production
-- [ ] Strong, unique passwords for database
-- [ ] JWT secret is 64+ characters
-- [ ] HTTPS enabled with valid SSL certificate
-- [ ] CORS configured for your domain only
-- [ ] Firewall configured (only ports 80, 443 open)
-- [ ] Database not exposed to internet
-- [ ] Redis not exposed to internet
-- [ ] Regular backups configured
-- [ ] Log monitoring in place
+- [ ] Strong JWT secret (64+ characters)
+- [ ] RDS not publicly accessible
+- [ ] EC2 security group: only ports 22, 80, 443, 8000
+- [ ] SSH key-based authentication only
+- [ ] Regular backups of RDS
+- [ ] CloudWatch alarms for monitoring
 
 ## Updating
 
-### Rolling Update
-
 ```bash
-# Pull latest code
-git pull origin main
+# Quick code update
+./deploy-quick.sh
 
-# Rebuild and restart
-docker-compose -f docker-compose.prod.yml up -d --build
+# Full update with dependencies
+./deploy.sh
 
-# Run any new migrations
-docker-compose -f docker-compose.prod.yml exec backend alembic upgrade head
+# Or manually on server:
+ssh ubuntu@your-ec2-ip
+cd /opt/govai/backend
+git pull  # if using git
+source ../venv/bin/activate
+pip install -r requirements.txt
+alembic upgrade head
+sudo systemctl restart govai-api
 ```
-
-### Full Restart
-
-```bash
-# Stop all services
-docker-compose -f docker-compose.prod.yml down
-
-# Rebuild everything
-docker-compose -f docker-compose.prod.yml build --no-cache
-
-# Start services
-docker-compose -f docker-compose.prod.yml up -d
-
-# Run migrations
-docker-compose -f docker-compose.prod.yml exec backend alembic upgrade head
-```
-
-## Support
-
-For issues:
-1. Check the logs first
-2. Verify all environment variables are set
-3. Check the health endpoints
-4. Review this deployment guide
