@@ -1,37 +1,45 @@
+#!/usr/bin/env python3
 """
-Celery tasks for automated opportunity discovery and evaluation
+Standalone script for automated opportunity discovery and evaluation.
+Replaces Celery task - run via cron every 15 minutes.
+
+Usage:
+    python scripts/discover_opportunities.py
+
+Cron entry:
+    */15 * * * * cd /opt/govai/backend && /opt/govai/venv/bin/python scripts/discover_opportunities.py >> /var/log/govai/discovery.log 2>&1
 """
-from celery import shared_task
+import sys
+import os
+
+# Add parent directory to path for imports
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+import asyncio
+import logging
+from datetime import datetime
+
 from app.core.database import SessionLocal
 from app.models.company import Company
 from app.services.sam_gov import sam_gov_service
 from app.services.ai_evaluator import ai_evaluator_service
 from app.services.opportunity import opportunity_service
-import asyncio
-import logging
-import nest_asyncio
 
-# Allow nested event loops (needed when called from async context)
-try:
-    nest_asyncio.apply()
-except:
-    pass
-
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
 
 
-@shared_task(name="discover_opportunities")
-def discover_opportunities_task():
+def discover_opportunities():
     """
-    Automated task to discover new opportunities from SAM.gov
-    Runs every 15 minutes via Celery Beat
-
-    Returns:
-        Dict with counts of discovered and evaluated opportunities
+    Discover new opportunities from SAM.gov and evaluate them.
     """
     db = SessionLocal()
     try:
-        logger.info("Starting opportunity discovery task...")
+        logger.info("Starting opportunity discovery...")
 
         # Get all companies with NAICS codes
         companies = db.query(Company).filter(Company.naics_codes.isnot(None)).all()
@@ -122,7 +130,7 @@ def discover_opportunities_task():
             logger.error(f"Error searching SAM.gov: {str(e)}")
 
         logger.info(
-            f"Discovery task completed: {discovered_count} opportunities discovered, "
+            f"Discovery completed: {discovered_count} opportunities discovered, "
             f"{evaluated_count} evaluations created"
         )
 
@@ -133,109 +141,23 @@ def discover_opportunities_task():
         }
 
     except Exception as e:
-        logger.error(f"Error in discovery task: {str(e)}")
+        logger.error(f"Error in discovery: {str(e)}")
         raise
     finally:
         db.close()
 
 
-@shared_task(name="evaluate_pending_opportunities")
-def evaluate_pending_opportunities_task(company_id: str = None):
-    """
-    Evaluate opportunities that haven't been evaluated yet for a company
-    Can be run for a specific company or all companies
+if __name__ == "__main__":
+    start_time = datetime.now()
+    logger.info(f"=== Discovery job started at {start_time} ===")
 
-    Args:
-        company_id: Optional company ID to evaluate for (if None, evaluates for all companies)
-
-    Returns:
-        Dict with count of evaluations created
-    """
-    db = SessionLocal()
     try:
-        logger.info(f"Starting evaluation task for company_id={company_id or 'all'}")
-
-        # Get companies to evaluate for
-        if company_id:
-            companies = db.query(Company).filter(Company.id == company_id).all()
-        else:
-            companies = db.query(Company).filter(Company.naics_codes.isnot(None)).all()
-
-        if not companies:
-            logger.info("No companies found")
-            return {"evaluations_created": 0}
-
-        evaluated_count = 0
-
-        for company in companies:
-            # Get opportunities needing evaluation
-            opportunities = opportunity_service.get_opportunities_needing_evaluation(
-                db, company.id, limit=50
-            )
-
-            logger.info(f"Found {len(opportunities)} opportunities needing evaluation for company {company.name}")
-
-            for opportunity in opportunities:
-                try:
-                    # Evaluate opportunity
-                    eval_result = asyncio.run(ai_evaluator_service.evaluate_opportunity(
-                        opportunity, company
-                    ))
-
-                    # Save evaluation
-                    eval_data = {
-                        "opportunity_id": opportunity.id,
-                        "company_id": company.id,
-                        **eval_result
-                    }
-
-                    opportunity_service.create_evaluation(db, eval_data)
-                    evaluated_count += 1
-
-                    logger.info(
-                        f"Evaluated opportunity {opportunity.notice_id} for company {company.name}: "
-                        f"{eval_result.get('recommendation')}"
-                    )
-
-                except Exception as e:
-                    logger.error(
-                        f"Error evaluating opportunity {opportunity.id} "
-                        f"for company {company.id}: {str(e)}"
-                    )
-                    continue
-
-        logger.info(f"Evaluation task completed: {evaluated_count} evaluations created")
-
-        return {"evaluations_created": evaluated_count}
-
+        result = discover_opportunities()
+        logger.info(f"Result: {result}")
     except Exception as e:
-        logger.error(f"Error in evaluation task: {str(e)}")
-        raise
-    finally:
-        db.close()
+        logger.error(f"Job failed: {e}")
+        sys.exit(1)
 
-
-@shared_task(name="cleanup_old_opportunities")
-def cleanup_old_opportunities_task():
-    """
-    Clean up old opportunities (older than 90 days)
-    Runs daily via Celery Beat
-
-    Returns:
-        Dict with count of opportunities deleted
-    """
-    db = SessionLocal()
-    try:
-        logger.info("Starting cleanup task...")
-
-        deleted_count = opportunity_service.delete_old_opportunities(db, days_old=90)
-
-        logger.info(f"Cleanup task completed: {deleted_count} opportunities deleted")
-
-        return {"deleted": deleted_count}
-
-    except Exception as e:
-        logger.error(f"Error in cleanup task: {str(e)}")
-        raise
-    finally:
-        db.close()
+    end_time = datetime.now()
+    duration = (end_time - start_time).total_seconds()
+    logger.info(f"=== Discovery job completed in {duration:.2f} seconds ===")
