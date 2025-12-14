@@ -70,7 +70,17 @@
       "Bash(python test_api.py:*)",
       "Bash(npm install)",
       "Bash(taskkill //F //PID 15736)",
-      "Bash(rm:*)"
+      "Bash(rm:*)",
+      "Bash(docker-compose down:*)",
+      "Bash(docker system prune:*)",
+      "Bash(docker run:*)",
+      "Bash(where:*)",
+      "Bash(docker pull:*)",
+      "Bash(python -m venv:*)",
+      "Bash(./venv/Scripts/pip install:*)",
+      "Bash(npm run dev:*)",
+      "Bash(./venv/Scripts/celery:*)",
+      "Bash(git push)"
     ],
     "deny": [],
     "ask": []
