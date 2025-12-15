@@ -1,7 +1,7 @@
 """Add discovery optimization tables and fields
 
-Revision ID: 003_discovery_optimization
-Revises: 002_add_opportunities_evaluations
+Revision ID: 003
+Revises: 002
 Create Date: 2025-12-15
 
 """
@@ -10,8 +10,8 @@ import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import UUID, JSONB, ARRAY
 
 # revision identifiers, used by Alembic.
-revision = '003_discovery_optimization'
-down_revision = '002_add_opportunities_evaluations'
+revision = '003'
+down_revision = '002'
 branch_labels = None
 depends_on = None
 

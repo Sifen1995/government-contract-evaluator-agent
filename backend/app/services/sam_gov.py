@@ -3,7 +3,7 @@ SAM.gov API integration service for discovering government contract opportunitie
 """
 from typing import List, Dict, Optional, Tuple
 import httpx
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from app.core.config import settings
 import logging
 
@@ -264,9 +264,15 @@ class SAMGovService:
 
         # Default date range
         if not posted_from:
-            posted_from = datetime.utcnow() - timedelta(days=30)
+            posted_from = datetime.now(timezone.utc) - timedelta(days=30)
         if not posted_to:
-            posted_to = datetime.utcnow()
+            posted_to = datetime.now(timezone.utc)
+
+        # Make datetimes timezone-naive for strftime
+        if posted_from.tzinfo:
+            posted_from = posted_from.replace(tzinfo=None)
+        if posted_to.tzinfo:
+            posted_to = posted_to.replace(tzinfo=None)
 
         logger.info(
             f"Batch search: {len(naics_codes)} NAICS codes, "

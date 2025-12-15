@@ -1,13 +1,18 @@
 """
 Discovery service for tracking and managing opportunity discovery runs.
 """
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Dict
 from sqlalchemy.orm import Session
 from app.models.discovery_run import DiscoveryRun
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def _now_utc():
+    """Get current UTC time as timezone-naive datetime for consistency."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 class DiscoveryService:
@@ -33,7 +38,7 @@ class DiscoveryService:
             New DiscoveryRun instance
         """
         run = DiscoveryRun(
-            started_at=datetime.utcnow(),
+            started_at=_now_utc(),
             status='running',
             naics_codes=naics_codes,
             posted_from=posted_from.date() if posted_from else None,
@@ -62,8 +67,9 @@ class DiscoveryService:
         Returns:
             Updated DiscoveryRun instance
         """
-        run.completed_at = datetime.utcnow()
-        run.duration_seconds = (run.completed_at - run.started_at).total_seconds()
+        run.completed_at = _now_utc()
+        started_at = run.started_at.replace(tzinfo=None) if run.started_at.tzinfo else run.started_at
+        run.duration_seconds = (run.completed_at - started_at).total_seconds()
         run.status = 'completed'
         run.api_calls_made = results.get('api_calls', 0)
         run.opportunities_found = results.get('found', 0)
@@ -98,8 +104,9 @@ class DiscoveryService:
         Returns:
             Updated DiscoveryRun instance
         """
-        run.completed_at = datetime.utcnow()
-        run.duration_seconds = (run.completed_at - run.started_at).total_seconds()
+        run.completed_at = _now_utc()
+        started_at = run.started_at.replace(tzinfo=None) if run.started_at.tzinfo else run.started_at
+        run.duration_seconds = (run.completed_at - started_at).total_seconds()
         run.status = 'failed'
         run.error_message = error
         run.error_details = details
@@ -126,8 +133,9 @@ class DiscoveryService:
         Returns:
             Updated DiscoveryRun instance
         """
-        run.completed_at = datetime.utcnow()
-        run.duration_seconds = (run.completed_at - run.started_at).total_seconds()
+        run.completed_at = _now_utc()
+        started_at = run.started_at.replace(tzinfo=None) if run.started_at.tzinfo else run.started_at
+        run.duration_seconds = (run.completed_at - started_at).total_seconds()
         run.status = 'partial'
         run.api_calls_made = results.get('api_calls', 0)
         run.opportunities_found = results.get('found', 0)
@@ -180,7 +188,7 @@ class DiscoveryService:
         Returns:
             Number of runs deleted
         """
-        cutoff = datetime.utcnow() - timedelta(days=days)
+        cutoff = _now_utc() - timedelta(days=days)
         deleted = db.query(DiscoveryRun).filter(
             DiscoveryRun.created_at < cutoff
         ).delete()
@@ -201,7 +209,7 @@ class DiscoveryService:
         """
         from sqlalchemy import func
 
-        cutoff = datetime.utcnow() - timedelta(days=days)
+        cutoff = _now_utc() - timedelta(days=days)
 
         runs = db.query(DiscoveryRun).filter(
             DiscoveryRun.created_at >= cutoff

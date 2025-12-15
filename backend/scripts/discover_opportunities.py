@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import asyncio
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Set
 
 from app.core.database import SessionLocal
@@ -68,18 +68,23 @@ def discover_opportunities():
 
         # Determine date range based on last successful run
         last_run = discovery_service.get_last_successful_run(db)
+        now = datetime.now(timezone.utc)
 
         if last_run and last_run.completed_at:
             # Incremental: only fetch opportunities posted since last run
             # Add 1 day buffer to catch any stragglers
-            posted_from = last_run.completed_at - timedelta(days=1)
+            completed_at = last_run.completed_at
+            # Make timezone-aware if needed
+            if completed_at.tzinfo is None:
+                completed_at = completed_at.replace(tzinfo=timezone.utc)
+            posted_from = completed_at - timedelta(days=1)
             logger.info(f"Incremental fetch: opportunities posted since {posted_from}")
         else:
             # First run: fetch last 30 days
-            posted_from = datetime.utcnow() - timedelta(days=30)
+            posted_from = now - timedelta(days=30)
             logger.info(f"Initial fetch: opportunities from last 30 days")
 
-        posted_to = datetime.utcnow()
+        posted_to = now
 
         # Start discovery run tracking
         discovery_run = discovery_service.start_run(
@@ -95,7 +100,7 @@ def discover_opportunities():
                 naics_codes=naics_codes,
                 posted_from=posted_from,
                 posted_to=posted_to,
-                limit_per_code=100
+                limit=500
             ))
         except Exception as e:
             logger.error(f"SAM.gov API error: {e}")
@@ -104,7 +109,9 @@ def discover_opportunities():
 
         raw_opportunities = result.get("opportunities", [])
         api_calls = result.get("api_calls", 0)
-        rate_limited = result.get("rate_limited", False)
+        errors = result.get("errors", [])
+        # Check if any errors indicate rate limiting
+        rate_limited = any("429" in str(e) or "rate" in str(e).lower() for e in (errors or []))
 
         logger.info(f"SAM.gov returned {len(raw_opportunities)} opportunities in {api_calls} API calls")
 
