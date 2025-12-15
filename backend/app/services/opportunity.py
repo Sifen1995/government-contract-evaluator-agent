@@ -1,7 +1,7 @@
 """
 Opportunity and Evaluation CRUD service
 """
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Tuple
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_, desc
 from app.models.opportunity import Opportunity
@@ -11,6 +11,24 @@ from datetime import datetime, timedelta
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+class UpsertResult:
+    """Result of batch upsert operation."""
+    def __init__(self):
+        self.new = 0
+        self.updated = 0
+        self.unchanged = 0
+        self.errors = 0
+
+    def to_dict(self) -> Dict:
+        return {
+            'new': self.new,
+            'updated': self.updated,
+            'unchanged': self.unchanged,
+            'errors': self.errors,
+            'total': self.new + self.updated + self.unchanged
+        }
 
 
 class OpportunityService:
@@ -312,6 +330,219 @@ class OpportunityService:
         db.commit()
         logger.info(f"Deleted {count} old opportunities (older than {days_old} days)")
         return count
+
+    def upsert_opportunities_batch(
+        self,
+        db: Session,
+        opportunities_data: List[Dict]
+    ) -> UpsertResult:
+        """
+        Efficiently upsert a batch of opportunities with deduplication.
+
+        Uses source_id (SAM.gov notice ID) for deduplication.
+        Only updates records if data has actually changed.
+
+        Args:
+            db: Database session
+            opportunities_data: List of dicts with opportunity fields
+
+        Returns:
+            UpsertResult with counts of new, updated, unchanged, errors
+        """
+        result = UpsertResult()
+
+        if not opportunities_data:
+            return result
+
+        # Extract all source_ids from incoming data
+        source_ids = [
+            opp.get('source_id') or opp.get('notice_id')
+            for opp in opportunities_data
+            if opp.get('source_id') or opp.get('notice_id')
+        ]
+
+        # Fetch all existing opportunities with these source_ids in one query
+        existing_opps = {
+            opp.source_id: opp
+            for opp in db.query(Opportunity).filter(
+                Opportunity.source_id.in_(source_ids)
+            ).all()
+        }
+
+        for opp_data in opportunities_data:
+            try:
+                source_id = opp_data.get('source_id') or opp_data.get('notice_id')
+                if not source_id:
+                    result.errors += 1
+                    continue
+
+                existing = existing_opps.get(source_id)
+
+                if existing:
+                    # Check if data has changed
+                    if self._has_opportunity_changed(existing, opp_data):
+                        # Update existing record
+                        for key, value in opp_data.items():
+                            if hasattr(existing, key) and key not in ('id', 'created_at'):
+                                setattr(existing, key, value)
+                        existing.updated_at = datetime.utcnow()
+                        result.updated += 1
+                    else:
+                        result.unchanged += 1
+                else:
+                    # Create new opportunity
+                    # Ensure evaluation_status is set for new opportunities
+                    if 'evaluation_status' not in opp_data:
+                        opp_data['evaluation_status'] = 'pending'
+                    opportunity = Opportunity(**opp_data)
+                    db.add(opportunity)
+                    result.new += 1
+
+            except Exception as e:
+                logger.error(f"Error upserting opportunity {opp_data.get('source_id')}: {e}")
+                result.errors += 1
+                continue
+
+        # Commit all changes at once
+        try:
+            db.commit()
+        except Exception as e:
+            logger.error(f"Error committing batch upsert: {e}")
+            db.rollback()
+            raise
+
+        logger.info(
+            f"Batch upsert complete: {result.new} new, {result.updated} updated, "
+            f"{result.unchanged} unchanged, {result.errors} errors"
+        )
+        return result
+
+    def _has_opportunity_changed(self, existing: Opportunity, new_data: Dict) -> bool:
+        """
+        Check if any relevant fields have changed.
+
+        Args:
+            existing: Existing Opportunity from database
+            new_data: New data dict from API
+
+        Returns:
+            True if data has changed, False otherwise
+        """
+        # Fields to compare for changes
+        fields_to_check = [
+            'title', 'description', 'response_deadline', 'status',
+            'set_aside_type', 'estimated_value_low', 'estimated_value_high',
+            'pop_city', 'pop_state', 'pop_zip', 'pop_country',
+            'attachments'
+        ]
+
+        for field in fields_to_check:
+            if field not in new_data:
+                continue
+
+            existing_value = getattr(existing, field, None)
+            new_value = new_data.get(field)
+
+            # Handle datetime comparison
+            if isinstance(existing_value, datetime) and isinstance(new_value, datetime):
+                # Compare without microseconds
+                if existing_value.replace(microsecond=0) != new_value.replace(microsecond=0):
+                    return True
+            elif existing_value != new_value:
+                return True
+
+        return False
+
+    def get_opportunities_pending_evaluation(
+        self,
+        db: Session,
+        limit: int = 50
+    ) -> List[Opportunity]:
+        """
+        Get opportunities that have not been generically evaluated yet.
+
+        Args:
+            db: Database session
+            limit: Max number of opportunities to return
+
+        Returns:
+            List of Opportunity instances pending evaluation
+        """
+        return db.query(Opportunity).filter(
+            and_(
+                Opportunity.status == "active",
+                Opportunity.response_deadline >= datetime.utcnow(),
+                or_(
+                    Opportunity.evaluation_status == 'pending',
+                    Opportunity.evaluation_status.is_(None)
+                )
+            )
+        ).order_by(desc(Opportunity.posted_date)).limit(limit).all()
+
+    def mark_opportunity_evaluated(
+        self,
+        db: Session,
+        opportunity_id: str,
+        generic_evaluation: Dict
+    ) -> Opportunity:
+        """
+        Mark an opportunity as generically evaluated.
+
+        Args:
+            db: Database session
+            opportunity_id: ID of opportunity
+            generic_evaluation: Dict with generic evaluation results
+
+        Returns:
+            Updated Opportunity instance
+        """
+        opportunity = db.query(Opportunity).filter(
+            Opportunity.id == opportunity_id
+        ).first()
+
+        if not opportunity:
+            raise ValueError(f"Opportunity {opportunity_id} not found")
+
+        opportunity.evaluation_status = 'evaluated'
+        opportunity.generic_evaluation = generic_evaluation
+        opportunity.updated_at = datetime.utcnow()
+
+        db.commit()
+        db.refresh(opportunity)
+
+        return opportunity
+
+    def get_evaluated_opportunities(
+        self,
+        db: Session,
+        skip: int = 0,
+        limit: int = 100,
+        naics_codes: Optional[List[str]] = None
+    ) -> List[Opportunity]:
+        """
+        Get opportunities that have been generically evaluated.
+
+        Args:
+            db: Database session
+            skip: Number to skip for pagination
+            limit: Max number to return
+            naics_codes: Optional NAICS code filter
+
+        Returns:
+            List of evaluated Opportunity instances
+        """
+        query = db.query(Opportunity).filter(
+            and_(
+                Opportunity.status == "active",
+                Opportunity.evaluation_status == 'evaluated',
+                Opportunity.response_deadline >= datetime.utcnow()
+            )
+        )
+
+        if naics_codes:
+            query = query.filter(Opportunity.naics_code.in_(naics_codes))
+
+        return query.order_by(desc(Opportunity.posted_date)).offset(skip).limit(limit).all()
 
 
 # Singleton instance

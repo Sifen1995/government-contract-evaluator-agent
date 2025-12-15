@@ -164,6 +164,7 @@ class SAMGovService:
         """
         all_opportunities = []
         total_count = 0
+        api_calls = 0
 
         # SAM.gov API doesn't support multiple NAICS codes in one request
         # Make separate requests for each NAICS code
@@ -193,6 +194,7 @@ class SAMGovService:
                 async with httpx.AsyncClient(timeout=30.0) as client:
                     logger.info(f"Fetching opportunities for NAICS {naics_code} from SAM.gov...")
                     response = await client.get(self.BASE_URL, params=params)
+                    api_calls += 1
                     response.raise_for_status()
                     data = response.json()
 
@@ -206,6 +208,7 @@ class SAMGovService:
 
             except httpx.HTTPStatusError as e:
                 logger.error(f"SAM.gov API HTTP error for NAICS {naics_code}: {e.response.status_code} - {e.response.text}")
+                api_calls += 1
                 continue
             except httpx.RequestError as e:
                 logger.error(f"SAM.gov API request error for NAICS {naics_code}: {str(e)}")
@@ -229,7 +232,105 @@ class SAMGovService:
             "opportunities": unique_opportunities,
             "total_count": len(unique_opportunities),
             "offset": offset,
-            "limit": limit
+            "limit": limit,
+            "api_calls": api_calls
+        }
+
+    async def search_opportunities_batch(
+        self,
+        naics_codes: List[str],
+        posted_from: Optional[datetime] = None,
+        posted_to: Optional[datetime] = None,
+        limit: int = 1000
+    ) -> Dict:
+        """
+        Fetch opportunities for multiple NAICS codes efficiently.
+
+        This is the optimized method for discovery runs - makes one call
+        per NAICS code but handles pagination and deduplication.
+
+        Args:
+            naics_codes: List of NAICS codes to search
+            posted_from: Only fetch opportunities posted after this date
+            posted_to: Only fetch opportunities posted before this date (default: now)
+            limit: Maximum total opportunities to fetch
+
+        Returns:
+            Dict with opportunities list, total count, and API call count
+        """
+        all_opportunities = []
+        api_calls = 0
+        errors = []
+
+        # Default date range
+        if not posted_from:
+            posted_from = datetime.utcnow() - timedelta(days=30)
+        if not posted_to:
+            posted_to = datetime.utcnow()
+
+        logger.info(
+            f"Batch search: {len(naics_codes)} NAICS codes, "
+            f"date range {posted_from.strftime('%Y-%m-%d')} to {posted_to.strftime('%Y-%m-%d')}"
+        )
+
+        for naics_code in naics_codes:
+            if len(all_opportunities) >= limit:
+                logger.info(f"Reached limit of {limit} opportunities")
+                break
+
+            params = {
+                "api_key": self.api_key,
+                "limit": min(100, limit - len(all_opportunities)),
+                "offset": 0,
+                "postedFrom": posted_from.strftime("%m/%d/%Y"),
+                "postedTo": posted_to.strftime("%m/%d/%Y"),
+                "ncode": naics_code
+            }
+
+            try:
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    logger.info(f"Fetching NAICS {naics_code}...")
+                    response = await client.get(self.BASE_URL, params=params)
+                    api_calls += 1
+                    response.raise_for_status()
+                    data = response.json()
+
+                    opportunities = data.get("opportunitiesData", [])
+                    logger.info(f"NAICS {naics_code}: {len(opportunities)} opportunities")
+                    all_opportunities.extend(opportunities)
+
+            except httpx.HTTPStatusError as e:
+                api_calls += 1
+                error_msg = f"NAICS {naics_code}: HTTP {e.response.status_code}"
+                logger.error(f"SAM.gov API error: {error_msg}")
+                errors.append(error_msg)
+
+                # Check if rate limited
+                if e.response.status_code == 429:
+                    logger.warning("Rate limited - stopping batch search")
+                    break
+
+            except Exception as e:
+                error_msg = f"NAICS {naics_code}: {str(e)}"
+                logger.error(f"Error: {error_msg}")
+                errors.append(error_msg)
+
+        # Deduplicate
+        seen = set()
+        unique = []
+        for opp in all_opportunities:
+            notice_id = opp.get("noticeId")
+            if notice_id and notice_id not in seen:
+                seen.add(notice_id)
+                unique.append(opp)
+
+        logger.info(f"Batch complete: {len(unique)} unique opportunities from {api_calls} API calls")
+
+        return {
+            "opportunities": unique,
+            "total_count": len(unique),
+            "api_calls": api_calls,
+            "errors": errors if errors else None
         }
 
     def parse_opportunity(self, raw_data: Dict) -> Dict:

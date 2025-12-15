@@ -190,6 +190,127 @@ Please provide your evaluation in the specified JSON format."""
 
         return prompt
 
+    async def evaluate_opportunity_generic(self, opportunity: Opportunity) -> Dict:
+        """
+        Perform a generic (company-agnostic) evaluation of an opportunity.
+
+        This evaluates the opportunity's overall quality, complexity, and requirements
+        without any company-specific matching. Used to pre-process opportunities once
+        before company-specific scoring.
+
+        Args:
+            opportunity: The opportunity to evaluate
+
+        Returns:
+            Dict with generic evaluation results
+        """
+        start_time = time.time()
+
+        try:
+            prompt = self._build_generic_evaluation_prompt(opportunity)
+
+            response = await self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": self._get_generic_system_prompt()
+                    },
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ],
+                temperature=0.3,
+                max_tokens=1500,
+                response_format={"type": "json_object"}
+            )
+
+            content = response.choices[0].message.content
+            evaluation_data = json.loads(content)
+
+            evaluation_time = time.time() - start_time
+
+            # Add metadata
+            evaluation_data["model_version"] = self.model
+            evaluation_data["tokens_used"] = response.usage.total_tokens
+            evaluation_data["evaluation_time_seconds"] = round(evaluation_time, 2)
+            evaluation_data["evaluated_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+            logger.info(
+                f"Generic evaluation of {opportunity.notice_id}: "
+                f"quality={evaluation_data.get('opportunity_quality')}, "
+                f"complexity={evaluation_data.get('complexity_level')}"
+            )
+
+            return evaluation_data
+
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse AI response as JSON: {str(e)}")
+            raise Exception("AI returned invalid response format")
+        except Exception as e:
+            logger.error(f"Error in generic evaluation: {str(e)}")
+            raise
+
+    def _get_generic_system_prompt(self) -> str:
+        """Get the system prompt for generic opportunity evaluation"""
+        return """You are an expert government contracting analyst. Your task is to evaluate government contract opportunities WITHOUT considering any specific company.
+
+Analyze the opportunity to determine:
+1. Overall opportunity quality (is this a well-defined, legitimate opportunity?)
+2. Complexity level (how complex are the requirements?)
+3. Key requirements and capabilities needed
+4. Risk factors
+5. Competition level estimate
+6. Opportunity category (IT services, construction, professional services, etc.)
+
+You must respond with ONLY valid JSON in this exact format:
+{
+  "opportunity_quality": <number 0-100>,
+  "complexity_level": "<low|medium|high|very_high>",
+  "category": "<category string>",
+  "key_requirements": ["req1", "req2", ...],
+  "required_capabilities": ["cap1", "cap2", ...],
+  "required_certifications": ["cert1", "cert2", ...],
+  "risk_factors": ["risk1", "risk2", ...],
+  "competition_level": "<low|medium|high>",
+  "contract_type_analysis": "<brief analysis of contract type>",
+  "summary": "<2-3 sentence summary of the opportunity>",
+  "recommended_company_size": "<micro|small|medium|large|any>",
+  "urgency_level": "<low|medium|high>"
+}
+
+Quality scoring:
+- 80-100: Clear requirements, well-funded, good timeline
+- 60-79: Some unclear aspects but evaluable
+- 40-59: Vague requirements or concerning factors
+- 0-39: Very poorly defined or problematic"""
+
+    def _build_generic_evaluation_prompt(self, opportunity: Opportunity) -> str:
+        """Build prompt for generic opportunity evaluation"""
+        description = opportunity.description or 'Not provided'
+        # Truncate very long descriptions
+        if len(description) > 3000:
+            description = description[:3000] + "... [truncated]"
+
+        return f"""Please evaluate this government contracting opportunity.
+
+OPPORTUNITY DETAILS:
+- Notice ID: {opportunity.notice_id}
+- Title: {opportunity.title}
+- Description: {description}
+- Department/Agency: {opportunity.department or 'Unknown'} / {opportunity.sub_agency or 'Unknown'}
+- Office: {opportunity.office or 'Unknown'}
+- NAICS Code: {opportunity.naics_code} - {opportunity.naics_description or 'Unknown'}
+- PSC Code: {opportunity.psc_code or 'Unknown'}
+- Set-Aside Type: {opportunity.set_aside or 'Full and Open Competition'}
+- Notice Type: {opportunity.type or 'Unknown'}
+- Response Deadline: {opportunity.response_deadline.strftime('%Y-%m-%d') if opportunity.response_deadline else 'Not specified'}
+- Location: {opportunity.place_of_performance_city or 'Unknown'}, {opportunity.place_of_performance_state or 'Unknown'}
+- Estimated Value: ${opportunity.estimated_value_low or 0:,.0f} - ${opportunity.estimated_value_high or 0:,.0f}
+
+Provide a generic evaluation of this opportunity's quality and requirements."""
+
     def calculate_basic_match_scores(self, opportunity: Opportunity, company: Company) -> Dict:
         """
         Calculate basic match scores without AI (used as fallback or for simple matching)

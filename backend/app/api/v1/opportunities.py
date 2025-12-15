@@ -1,7 +1,7 @@
 """
 API endpoints for opportunities and evaluations
 """
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from sqlalchemy.orm import Session
 from sqlalchemy import func, case
 from typing import List, Optional
@@ -21,6 +21,8 @@ from app.schemas.opportunity import (
 )
 from app.services.opportunity import opportunity_service
 from app.services.company import get_user_company
+from app.services.match_scoring import match_scoring_service
+from app.services.opportunity_filter import opportunity_filter
 import logging
 
 logger = logging.getLogger(__name__)
@@ -428,6 +430,204 @@ async def get_pipeline_stats(
     except Exception as e:
         logger.error(f"Error getting pipeline stats: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to get pipeline statistics")
+
+
+@router.post("/opportunities/{opportunity_id}/evaluate")
+async def evaluate_opportunity_lazy(
+    opportunity_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Lazy evaluation: Evaluate an opportunity for the user's company on-demand.
+
+    This endpoint:
+    1. Returns existing evaluation if already evaluated
+    2. Computes rule-based match score (instant, no AI)
+    3. Triggers AI evaluation in background if not yet evaluated
+
+    This approach provides immediate feedback while expensive AI evaluation
+    runs asynchronously.
+    """
+    from app.services.ai_evaluator import ai_evaluator_service
+    import asyncio
+
+    try:
+        # Get opportunity
+        opportunity = opportunity_service.get_opportunity_by_id(db, opportunity_id)
+        if not opportunity:
+            raise HTTPException(status_code=404, detail="Opportunity not found")
+
+        # Get company
+        company = get_user_company(db, current_user.id)
+        if not company:
+            raise HTTPException(status_code=400, detail="Company profile required")
+
+        # Check for existing evaluation
+        existing_eval = opportunity_service.get_evaluation_for_opportunity(
+            db, opportunity_id, company.id
+        )
+
+        if existing_eval:
+            # Return existing evaluation with opportunity data
+            return {
+                "status": "existing",
+                "evaluation": {
+                    "id": str(existing_eval.id),
+                    "fit_score": existing_eval.fit_score,
+                    "win_probability": existing_eval.win_probability,
+                    "recommendation": existing_eval.recommendation,
+                    "reasoning": existing_eval.reasoning,
+                    "strengths": existing_eval.strengths,
+                    "weaknesses": existing_eval.weaknesses,
+                    "evaluated_at": existing_eval.evaluated_at.isoformat() if existing_eval.evaluated_at else None
+                },
+                "match_scores": None  # Already have full AI evaluation
+            }
+
+        # Check if opportunity passes basic filters
+        filter_result = opportunity_filter.filter_opportunity(opportunity, company)
+
+        if not filter_result.passed:
+            # Opportunity filtered out - return quick NO_BID recommendation
+            return {
+                "status": "filtered",
+                "filter_reason": filter_result.reason,
+                "recommendation": "NO_BID",
+                "match_scores": None,
+                "message": f"Opportunity filtered: {filter_result.reason}"
+            }
+
+        # Compute instant rule-based match scores
+        match_scores = match_scoring_service.compute_score(opportunity, company)
+
+        # Cache the match scores
+        try:
+            match_scoring_service.compute_and_cache(db, opportunity, company)
+        except Exception as e:
+            logger.warning(f"Failed to cache match scores: {e}")
+
+        # Determine quick recommendation based on match scores
+        fit_score = match_scores['fit_score']
+        if fit_score >= 70:
+            quick_recommendation = "BID"
+        elif fit_score >= 50:
+            quick_recommendation = "RESEARCH"
+        else:
+            quick_recommendation = "NO_BID"
+
+        # Perform AI evaluation synchronously for immediate result
+        # (We could make this async/background for even faster response)
+        try:
+            eval_result = await ai_evaluator_service.evaluate_opportunity(
+                opportunity, company
+            )
+
+            # Save evaluation
+            eval_data = {
+                "opportunity_id": opportunity.id,
+                "company_id": company.id,
+                **eval_result
+            }
+            saved_eval = opportunity_service.create_evaluation(db, eval_data)
+
+            return {
+                "status": "evaluated",
+                "evaluation": {
+                    "id": str(saved_eval.id),
+                    "fit_score": saved_eval.fit_score,
+                    "win_probability": saved_eval.win_probability,
+                    "recommendation": saved_eval.recommendation,
+                    "reasoning": saved_eval.reasoning,
+                    "strengths": saved_eval.strengths,
+                    "weaknesses": saved_eval.weaknesses,
+                    "evaluated_at": saved_eval.evaluated_at.isoformat() if saved_eval.evaluated_at else None
+                },
+                "match_scores": match_scores
+            }
+
+        except Exception as e:
+            logger.error(f"AI evaluation failed: {e}")
+            # Return rule-based evaluation as fallback
+            return {
+                "status": "rule_based",
+                "message": "AI evaluation unavailable, showing rule-based assessment",
+                "evaluation": {
+                    "fit_score": fit_score,
+                    "recommendation": quick_recommendation,
+                    "reasoning": f"Rule-based evaluation: NAICS match={match_scores['naics_score']}%, "
+                                f"Certification match={match_scores['cert_score']}%, "
+                                f"Size fit={match_scores['size_score']}%, "
+                                f"Geographic fit={match_scores['geo_score']}%"
+                },
+                "match_scores": match_scores
+            }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in lazy evaluation: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to evaluate opportunity")
+
+
+@router.get("/opportunities/{opportunity_id}/match-score")
+async def get_match_score(
+    opportunity_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Get instant rule-based match score for an opportunity (no AI).
+
+    This is a fast endpoint that returns immediately with rule-based scoring.
+    Use this for quick filtering and sorting before requesting full AI evaluation.
+    """
+    try:
+        # Get opportunity
+        opportunity = opportunity_service.get_opportunity_by_id(db, opportunity_id)
+        if not opportunity:
+            raise HTTPException(status_code=404, detail="Opportunity not found")
+
+        # Get company
+        company = get_user_company(db, current_user.id)
+        if not company:
+            raise HTTPException(status_code=400, detail="Company profile required")
+
+        # Check cache first
+        cached = match_scoring_service.get_cached_score(db, opportunity_id, str(company.id))
+
+        if cached:
+            return {
+                "status": "cached",
+                "fit_score": float(cached.fit_score) if cached.fit_score else None,
+                "naics_score": float(cached.naics_score) if cached.naics_score else None,
+                "cert_score": float(cached.cert_score) if cached.cert_score else None,
+                "size_score": float(cached.size_score) if cached.size_score else None,
+                "geo_score": float(cached.geo_score) if cached.geo_score else None,
+                "deadline_score": float(cached.deadline_score) if cached.deadline_score else None,
+                "computed_at": cached.computed_at.isoformat() if cached.computed_at else None
+            }
+
+        # Compute fresh scores
+        scores = match_scoring_service.compute_score(opportunity, company)
+
+        # Cache for future requests
+        try:
+            match_scoring_service.compute_and_cache(db, opportunity, company)
+        except Exception as e:
+            logger.warning(f"Failed to cache match scores: {e}")
+
+        return {
+            "status": "computed",
+            **scores,
+            "computed_at": None
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error computing match score: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to compute match score")
 
 
 @router.post("/actions/trigger-discovery")

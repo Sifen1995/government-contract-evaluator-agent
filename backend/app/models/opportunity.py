@@ -54,6 +54,10 @@ class Opportunity(Base):
     # Status tracking
     status = Column(String(20), nullable=True, index=True, default="active")
 
+    # Generic evaluation tracking (company-agnostic)
+    evaluation_status = Column(String(20), nullable=True, index=True, default="pending")  # pending, evaluated, skipped
+    generic_evaluation = Column(JSONB, nullable=True)  # AI evaluation results (opportunity quality, complexity, etc.)
+
     # Raw data from SAM.gov (for debugging/future use)
     raw_data = Column(JSONB, nullable=True)
 
