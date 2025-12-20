@@ -8,72 +8,98 @@ GovAI is an AI-powered government contract discovery platform that automatically
 
 ## Development Commands
 
-### Start/Stop Services
+### Backend Setup & Run
 
 ```bash
-# Start all services (MySQL, Redis, Backend, Frontend, Celery)
-docker-compose up -d
+cd backend
 
-# Stop all services
-docker-compose down
+# Create virtual environment (first time)
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 
-# Rebuild after code changes
-docker-compose up -d --build
+# Install dependencies
+pip install -r requirements.txt
+# OR with Poetry
+poetry install
 
-# View logs (all or specific service)
-docker-compose logs -f
-docker-compose logs -f backend
+# Run database migrations
+alembic upgrade head
+
+# Start development server
+uvicorn app.main:app --reload --port 8000
+```
+
+### Frontend Setup & Run
+
+```bash
+cd frontend
+
+# Install dependencies
+npm install
+
+# Start development server
+npm run dev
 ```
 
 ### Database Migrations
 
 ```bash
+cd backend
+source venv/bin/activate
+
 # Run migrations
-docker-compose exec backend alembic upgrade head
+alembic upgrade head
 
 # Create new migration
-docker-compose exec backend alembic revision --autogenerate -m "description"
+alembic revision --autogenerate -m "description"
 
 # Rollback migration
-docker-compose exec backend alembic downgrade -1
+alembic downgrade -1
+
+# View current migration
+alembic current
 ```
 
-### Direct Container Access
+### Running Background Tasks
+
+The app uses standalone Python scripts (run via cron in production):
 
 ```bash
-# Backend shell
-docker-compose exec backend bash
+cd backend
+source venv/bin/activate
 
-# MySQL CLI
-docker-compose exec mysql mysql -u govai_user -p govai
+# Discover opportunities from SAM.gov
+python scripts/discover_opportunities.py
 
-# Redis CLI
-docker-compose exec redis redis-cli
-```
+# Evaluate pending opportunities with AI
+python scripts/evaluate_pending.py
 
-### Frontend Development
+# Send daily digest emails
+python scripts/send_daily_digest.py
 
-```bash
-docker-compose exec frontend sh
-docker-compose exec frontend npm install <package-name>
+# Send deadline reminders
+python scripts/send_deadline_reminders.py
+
+# Clean up old opportunities
+python scripts/cleanup_opportunities.py
 ```
 
 ## Architecture
 
 ### Tech Stack
-- **Backend**: Python 3.11 + FastAPI + SQLAlchemy + MySQL 8.0
+- **Backend**: Python 3.9+ + FastAPI + SQLAlchemy + MySQL
 - **Frontend**: Next.js 14 + TypeScript + Tailwind CSS + shadcn/ui
-- **Task Queue**: Celery with Redis broker
 - **AI**: OpenAI GPT-4
+- **Email**: SendGrid (console mode for dev)
+- **Scheduled Tasks**: Cron jobs with standalone Python scripts
 
 ### Backend Structure (`backend/`)
 - `app/api/v1/` - API route handlers (auth, company, opportunities, reference)
 - `app/core/` - Configuration, database connection, security utilities
 - `app/models/` - SQLAlchemy models (User, Company, Opportunity, Evaluation)
 - `app/schemas/` - Pydantic request/response schemas
-- `app/services/` - Business logic (auth, company, opportunity, ai_evaluator, sam_gov, email)
-- `agents/` - AI agents (discovery, evaluation, email_agent)
-- `tasks/` - Celery tasks (discovery, email_tasks)
+- `app/services/` - Business logic (auth, company, opportunity, ai_evaluator, sam_gov, email, discovery, match_scoring)
+- `scripts/` - Standalone cron job scripts (discovery, email tasks, cleanup)
 - `alembic/` - Database migrations
 
 ### Frontend Structure (`frontend/`)
@@ -84,11 +110,11 @@ docker-compose exec frontend npm install <package-name>
 - `types/` - TypeScript type definitions
 
 ### Key Data Flow
-1. Celery Beat triggers opportunity discovery every 15 minutes
-2. Discovery agent queries SAM.gov API
-3. AI evaluation agent scores opportunities against company profiles
+1. Cron job triggers opportunity discovery (every 15 minutes in production)
+2. Discovery script queries SAM.gov API and stores opportunities
+3. AI evaluation script scores opportunities against company profiles
 4. Users view recommendations and manage pipeline (WATCHING → BIDDING → WON/LOST)
-5. Email notifications for daily digest (8 AM) and deadline reminders
+5. Email scripts send daily digest (8 AM) and deadline reminders
 
 ### External Services
 - **SAM.gov API**: Government contract opportunities (requires API key)
@@ -103,13 +129,15 @@ docker-compose exec frontend npm install <package-name>
 
 ## Environment Variables
 
-Copy `.env.example` to `.env` and configure:
-- `DATABASE_URL`, `REDIS_URL` - Database connections
+Create a `.env` file in the `backend/` directory (copy from `.env.example`):
+
+- `DATABASE_URL` - MySQL connection string (e.g., `mysql+pymysql://user:pass@localhost:3306/govai`)
 - `JWT_SECRET` - Authentication secret (generate with `openssl rand -hex 32`)
-- `SAM_API_KEY`, `OPENAI_API_KEY` - External API keys
+- `SAM_API_KEY` - SAM.gov API key
+- `OPENAI_API_KEY` - OpenAI API key
 - `EMAIL_MODE` - `console` for dev, `sendgrid` for production
 - `DEBUG` - Set to `false` in production
 
 ## Production Deployment
 
-See `DEPLOYMENT.md` for production setup with docker-compose.prod.yml, Nginx configuration, SSL, and security hardening.
+See `DEPLOYMENT.md` for production setup on EC2 with systemd services, cron jobs, and Nginx configuration.
