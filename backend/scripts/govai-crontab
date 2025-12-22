@@ -23,3 +23,19 @@ LOG_DIR=/var/log/govai
 
 # Rotate logs weekly (keep 4 weeks)
 0 0 * * 0 find $LOG_DIR -name "*.log" -mtime +28 -delete
+
+
+
+# USA Spending – weekly
+0 2 * * 0 cd /opt/govai/backend && python scripts/discover_usaspending.py >> logs/usaspending.log 2>&1
+
+# Forecasts – weekly
+0 3 * * 1 cd /opt/govai/backend && python scripts/discover_forecasts.py >> logs/forecasts.log 2>&1
+
+# DC OCP – hourly
+0 * * * * cd /opt/govai/backend && python scripts/discover_dc_ocp.py >> logs/dc_ocp.log 2>&1
+
+# DC Independent – hourly (offset)
+15 * * * * cd /opt/govai/backend && python scripts/discover_dc_independent.py >> logs/dc_independent.log 2>&1
+
+

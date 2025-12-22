@@ -32,55 +32,31 @@ router = APIRouter()
 
 # Opportunity endpoints
 
-@router.get("/opportunities", response_model=OpportunityListResponse)
-async def list_opportunities(
-    skip: int = Query(0, ge=0),
-    limit: int = Query(20, ge=1, le=100),
-    naics_code: Optional[str] = None,
-    active_only: bool = True,
-    current_user: User = Depends(get_current_user),
+@router.get("/", response_model=List[OpportunityListResponse])
+def list_opportunities(
     db: Session = Depends(get_db),
+
+    source: Optional[str] = Query(None, description="Filter by data source"),
+    is_forecast: Optional[bool] = Query(None, description="Forecast or live opportunities"),
+    status: Optional[str] = Query("active", description="Opportunity status"),
 ):
     """
-    List all opportunities (optionally filtered by NAICS code)
+    List opportunities with optional filters.
     """
-    try:
-        # Get user's company to filter by NAICS codes
-        company = get_user_company(db, current_user.id)
-        naics_codes = None
 
-        if naics_code:
-            naics_codes = [naics_code]
-        elif company and company.naics_codes:
-            naics_codes = company.naics_codes
+    query = db.query(Opportunity)
 
-        # Get opportunities
-        opportunities = opportunity_service.list_opportunities(
-            db,
-            skip=skip,
-            limit=limit,
-            active_only=active_only,
-            naics_codes=naics_codes
-        )
+    if source:
+        query = query.filter(Opportunity.source == source)
 
-        # Get total count
-        query = db.query(Opportunity)
-        if active_only:
-            query = query.filter(Opportunity.status == "active")
-        if naics_codes:
-            query = query.filter(Opportunity.naics_code.in_(naics_codes))
-        total = query.count()
+    if is_forecast is not None:
+        query = query.filter(Opportunity.is_forecast == is_forecast)
 
-        return {
-            "opportunities": opportunities,
-            "total": total,
-            "skip": skip,
-            "limit": limit
-        }
+    if status:
+        query = query.filter(Opportunity.status == status)
 
-    except Exception as e:
-        logger.error(f"Error listing opportunities: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to list opportunities")
+    return query.order_by(Opportunity.posted_date.desc()).all()
+
 
 
 @router.get("/opportunities/{opportunity_id}", response_model=OpportunityWithEvaluation)
@@ -644,7 +620,7 @@ async def trigger_discovery(
 
     Set force_refresh=true to bypass the cache.
     """
-    from app.services.sam_gov import sam_gov_service
+    from backend.app.services.providers.sam_gov import sam_gov_service
     from app.services.ai_evaluator import ai_evaluator_service
 
     try:

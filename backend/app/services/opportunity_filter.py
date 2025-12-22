@@ -9,6 +9,8 @@ from app.models.opportunity import Opportunity
 from app.models.company import Company
 import logging
 
+from backend.app.services import opportunity
+
 logger = logging.getLogger(__name__)
 
 
@@ -105,6 +107,29 @@ class OpportunityFilter:
         Returns:
             FilterResult indicating if opportunity should be evaluated
         """
+
+        if opportunity.evaluation_status == "evaluated":
+          return FilterResult(
+                passed=False,
+                reason="Already evaluated",
+                filter_name="evaluation"
+            )
+        if opportunity.is_forecast:
+          return FilterResult(
+                passed=False,
+                reason="Forecast opportunity",
+                filter_name="forecast"
+       )
+        
+        if opportunity.source in ("dc_ocp", "dc_independent"):
+           if opportunity.response_deadline:
+              days_left = (opportunity.response_deadline - datetime.utcnow()).days
+              if days_left < 2:
+                  return FilterResult(
+                    passed=False,
+                    reason="DC opportunity deadline too close",
+                    filter_name="deadline"
+            )
         # Check NAICS match first (most common filter)
         result = self._check_naics(opportunity, company)
         if not result.passed:

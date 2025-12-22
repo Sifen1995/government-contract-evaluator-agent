@@ -16,7 +16,7 @@ import logging
 from app.core.database import SessionLocal
 from app.models.company import Company
 from app.models.opportunity import Opportunity
-from app.services.sam_gov import sam_gov_service
+from backend.app.services.providers.sam_gov import sam_gov_service
 from app.services.opportunity import opportunity_service
 
 logger = logging.getLogger(__name__)

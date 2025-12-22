@@ -3,13 +3,19 @@ Match scoring service for computing company-opportunity fit scores.
 Uses rule-based logic (no AI) for fast, cheap scoring.
 """
 from datetime import datetime, timedelta
+from itertools import count
 from typing import List, Dict, Optional
 from decimal import Decimal
 from sqlalchemy.orm import Session
 from app.models.opportunity import Opportunity
+from app.models.award import Award
+
 from app.models.company import Company
 from app.models.company_opportunity_score import CompanyOpportunityScore
 import logging
+
+from backend.app.models import opportunity
+from backend.app.models import company
 
 logger = logging.getLogger(__name__)
 
@@ -45,43 +51,49 @@ class MatchScoringService:
     }
 
     def compute_score(
-        self,
-        opportunity: Opportunity,
-        company: Company
-    ) -> Dict[str, float]:
-        """
-        Compute all match scores between an opportunity and company.
+      self,
+      opportunity: Opportunity,
+      company: Company,
+      db: Session
+  ) -> Dict[str, float]:
 
-        Args:
-            opportunity: Opportunity to score
-            company: Company to match against
+     naics_score = self._compute_naics_score(opportunity, company)
+     cert_score = self._compute_cert_score(opportunity, company)
+     size_score = self._compute_size_score(opportunity, company)
+     geo_score = self._compute_geo_score(opportunity, company)
+     deadline_score = self._compute_deadline_score(opportunity)
 
-        Returns:
-            Dict with individual scores and overall fit_score
-        """
-        naics_score = self._compute_naics_score(opportunity, company)
-        cert_score = self._compute_cert_score(opportunity, company)
-        size_score = self._compute_size_score(opportunity, company)
-        geo_score = self._compute_geo_score(opportunity, company)
-        deadline_score = self._compute_deadline_score(opportunity)
+    # Base weighted score (0–100)
+     base_score = (
+        naics_score * self.WEIGHTS['naics'] +
+        cert_score * self.WEIGHTS['cert'] +
+        size_score * self.WEIGHTS['size'] +
+        geo_score * self.WEIGHTS['geo'] +
+        deadline_score * self.WEIGHTS['deadline']
+    )
 
-        # Compute weighted average
-        fit_score = (
-            naics_score * self.WEIGHTS['naics'] +
-            cert_score * self.WEIGHTS['cert'] +
-            size_score * self.WEIGHTS['size'] +
-            geo_score * self.WEIGHTS['geo'] +
-            deadline_score * self.WEIGHTS['deadline']
-        )
+    # Bonus signals
+     award_score = self._compute_award_history(db, opportunity, company)
+     agency_score = self._compute_agency_familiarity(db, opportunity)
+     source_score = self._compute_source_weight(opportunity)
 
-        return {
-            'fit_score': round(fit_score, 2),
-            'naics_score': round(naics_score, 2),
-            'cert_score': round(cert_score, 2),
-            'size_score': round(size_score, 2),
-            'geo_score': round(geo_score, 2),
-            'deadline_score': round(deadline_score, 2)
-        }
+     bonus = (
+        award_score * 0.10 +
+        agency_score * 0.10 +
+        source_score * 0.05
+    )
+
+     fit_score = min(100.0, base_score + bonus)
+
+     return {
+        'fit_score': round(fit_score, 2),
+        'naics_score': round(naics_score, 2),
+        'cert_score': round(cert_score, 2),
+        'size_score': round(size_score, 2),
+        'geo_score': round(geo_score, 2),
+        'deadline_score': round(deadline_score, 2)
+    }
+
 
     def _compute_naics_score(self, opportunity: Opportunity, company: Company) -> float:
         """Score NAICS code match (0-100)."""
@@ -337,6 +349,48 @@ class MatchScoringService:
             CompanyOpportunityScore.company_id == company_id,
             CompanyOpportunityScore.opportunity_id == opportunity_id
         ).first()
+
+    def _compute_award_history(
+        self,
+        db: Session,
+        opportunity: Opportunity,
+        company: Company
+   ) -> float:
+       if not opportunity.naics_code:
+          return 50.0
+
+       count = db.query(Award).filter(
+       Award.naics == opportunity.naics_code
+      ).count()
+
+       return min(100.0, count * 10.0)
+
+
+    def _compute_agency_familiarity(
+      self,
+      db: Session,
+      opportunity: Opportunity
+  ) -> float:
+     if not opportunity.issuing_agency:
+        return 50.0
+
+     count = db.query(Award).filter(
+     Award.agency.ilike(f"%{opportunity.issuing_agency}%")
+    ).count()
+
+     return min(100.0, count * 10.0)
+
+
+    def _compute_source_weight(self, opportunity: Opportunity) -> float:
+      weights = {
+        "sam.gov": 100.0,
+        "dc_ocp": 80.0,
+        "dc_independent": 75.0,
+        "procurement_forecast": 30.0
+    }
+      return weights.get(opportunity.source, 50.0)
+
+
 
 
 # Singleton instance

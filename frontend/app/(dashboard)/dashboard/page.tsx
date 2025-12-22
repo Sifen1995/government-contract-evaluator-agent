@@ -101,6 +101,10 @@ export default function DashboardPage() {
                 <Button variant="ghost" onClick={() => router.push('/pipeline')}>
                   Pipeline
                 </Button>
+                <Button variant="ghost" onClick={() => router.push('/analytics')}>
+                 Analytics
+               </Button>
+
                 <Button variant="ghost" onClick={() => router.push('/settings')}>
                   Settings
                 </Button>

@@ -37,6 +37,8 @@ export interface Opportunity {
   created_at: string;
   updated_at: string;
   last_synced_at: string;
+  is_forecast: boolean;
+
 }
 
 export interface Evaluation {
@@ -67,6 +69,8 @@ export interface Evaluation {
 
 export interface OpportunityWithEvaluation extends Opportunity {
   evaluation?: Evaluation;
+  issuing_agency?: string;
+  source?: string;
 }
 
 export interface EvaluationWithOpportunity extends Evaluation {
