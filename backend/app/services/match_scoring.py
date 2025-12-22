@@ -14,8 +14,6 @@ from app.models.company import Company
 from app.models.company_opportunity_score import CompanyOpportunityScore
 import logging
 
-from backend.app.models import opportunity
-from backend.app.models import company
 
 logger = logging.getLogger(__name__)
 

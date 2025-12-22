@@ -620,7 +620,7 @@ async def trigger_discovery(
 
     Set force_refresh=true to bypass the cache.
     """
-    from backend.app.services.providers.sam_gov import sam_gov_service
+    from app.services.providers.sam_gov import sam_gov_service
     from app.services.ai_evaluator import ai_evaluator_service
 
     try:

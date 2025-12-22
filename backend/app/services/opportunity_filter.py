@@ -9,8 +9,6 @@ from app.models.opportunity import Opportunity
 from app.models.company import Company
 import logging
 
-from backend.app.services import opportunity
-
 logger = logging.getLogger(__name__)
 
 
