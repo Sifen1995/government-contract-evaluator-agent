@@ -27,6 +27,7 @@ from app.services.email import (
     email_service,
     get_deadline_reminder_template,
 )
+from app.services.auth import get_or_create_unsubscribe_token
 
 # Configure logging
 logging.basicConfig(
@@ -91,11 +92,15 @@ def send_deadline_reminders():
                         "status": evaluation.user_saved
                     }
 
+                    # Get or create unsubscribe token for one-click unsubscribe
+                    unsubscribe_token = get_or_create_unsubscribe_token(db, user)
+
                     # Generate email
                     html_content = get_deadline_reminder_template(
                         user_name=user.first_name,
                         opportunity=opp_data,
-                        days_until=days
+                        days_until=days,
+                        unsubscribe_token=unsubscribe_token
                     )
 
                     # Send email

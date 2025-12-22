@@ -27,6 +27,7 @@ from app.services.email import (
     email_service,
     get_daily_digest_template,
 )
+from app.services.auth import get_or_create_unsubscribe_token
 
 # Configure logging
 logging.basicConfig(
@@ -136,11 +137,15 @@ def send_daily_digest_emails():
                     "in_pipeline": in_pipeline
                 }
 
+                # Get or create unsubscribe token for one-click unsubscribe
+                unsubscribe_token = get_or_create_unsubscribe_token(db, user)
+
                 html_content = get_daily_digest_template(
                     user_name=user.first_name,
                     new_opportunities=new_opps_formatted,
                     deadline_reminders=reminders_formatted,
-                    stats=stats
+                    stats=stats,
+                    unsubscribe_token=unsubscribe_token
                 )
 
                 # Send email

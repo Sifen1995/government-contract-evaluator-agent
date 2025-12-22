@@ -1,5 +1,5 @@
-from sqlalchemy import Column, String, DateTime, Text, Integer, ForeignKey, ARRAY
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Column, String, DateTime, Text, Integer, ForeignKey, ARRAY, Numeric
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 from datetime import datetime
 import uuid
@@ -28,6 +28,11 @@ class Evaluation(Base):
     strengths = Column(ARRAY(Text), nullable=True)  # List of strengths
     weaknesses = Column(ARRAY(Text), nullable=True)  # List of weaknesses
     executive_summary = Column(Text, nullable=True)  # Brief summary
+
+    # Financial Analysis (GovRat parity)
+    estimated_profit = Column(Numeric(15, 2), nullable=True)  # Estimated profit amount
+    profit_margin_percentage = Column(Numeric(5, 2), nullable=True)  # Profit margin %
+    cost_breakdown = Column(JSONB, nullable=True)  # Task-level cost breakdown
 
     # Timestamp
     evaluated_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=True)

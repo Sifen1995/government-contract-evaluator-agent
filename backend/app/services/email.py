@@ -166,7 +166,8 @@ def get_daily_digest_template(
     user_name: str,
     new_opportunities: List[Dict],
     deadline_reminders: List[Dict],
-    stats: Dict
+    stats: Dict,
+    unsubscribe_token: str = None
 ) -> str:
     """Generate daily digest email HTML"""
 
@@ -243,7 +244,8 @@ def get_daily_digest_template(
 
             <p style="color: #9ca3af; font-size: 12px; margin-top: 30px;">
                 You're receiving this because you're subscribed to daily digests.<br>
-                <a href="{settings.FRONTEND_URL}/settings" style="color: #3b82f6;">Update your preferences</a>
+                <a href="{settings.FRONTEND_URL}/unsubscribe?token={unsubscribe_token}" style="color: #dc2626;">Unsubscribe</a> |
+                <a href="{settings.FRONTEND_URL}/settings" style="color: #3b82f6;">Manage preferences</a>
             </p>
         </div>
     </body>
@@ -254,7 +256,8 @@ def get_daily_digest_template(
 def get_deadline_reminder_template(
     user_name: str,
     opportunity: Dict,
-    days_until: int
+    days_until: int,
+    unsubscribe_token: str = None
 ) -> str:
     """Generate deadline reminder email HTML"""
 
@@ -293,7 +296,8 @@ def get_deadline_reminder_template(
 
             <p style="color: #9ca3af; font-size: 12px; margin-top: 30px;">
                 You're receiving this because this opportunity is in your pipeline.<br>
-                <a href="{settings.FRONTEND_URL}/settings" style="color: #3b82f6;">Update your preferences</a>
+                <a href="{settings.FRONTEND_URL}/unsubscribe?token={unsubscribe_token}" style="color: #dc2626;">Unsubscribe</a> |
+                <a href="{settings.FRONTEND_URL}/settings" style="color: #3b82f6;">Manage preferences</a>
             </p>
         </div>
     </body>

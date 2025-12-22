@@ -98,6 +98,7 @@ Your task is to analyze a government contract opportunity and a company's profil
 2. A win probability (0-100): The estimated likelihood of winning this contract
 3. A recommendation: BID, NO_BID, or RESEARCH
 4. Detailed analysis including strengths, weaknesses, key requirements, and missing capabilities
+5. FINANCIAL ANALYSIS: Estimated profit and detailed cost breakdown by task
 
 Consider these factors:
 - NAICS code alignment (exact match vs. similar)
@@ -109,6 +110,13 @@ Consider these factors:
 - Past performance requirements (if mentioned)
 - Technical complexity vs. company's capabilities
 
+FINANCIAL ANALYSIS GUIDELINES:
+- Use the opportunity's estimated value range or infer from scope/description
+- Government contractors typically achieve 10-20% profit margins
+- Break down the work into 3-7 major task categories based on requirements
+- Include variance estimates (typically ±20-30% of task cost)
+- Consider labor rates: Senior consultants $150-250/hr, Mid-level $100-150/hr, Junior $60-100/hr
+
 IMPORTANT: You must respond with ONLY valid JSON in this exact format:
 {
   "fit_score": <number 0-100>,
@@ -119,11 +127,28 @@ IMPORTANT: You must respond with ONLY valid JSON in this exact format:
   "key_requirements": ["requirement 1", "requirement 2", ...],
   "missing_capabilities": ["missing 1", "missing 2", ...],
   "reasoning": "<detailed explanation of your evaluation>",
+  "executive_summary": "<2-3 sentence summary of the opportunity and fit>",
   "risk_factors": ["risk 1", "risk 2", ...],
   "naics_match": <0|1|2>,
   "set_aside_match": <0|1>,
   "geographic_match": <0|1>,
-  "contract_value_match": <0|1>
+  "contract_value_match": <0|1>,
+  "estimated_profit": <number - estimated profit in dollars>,
+  "profit_margin_percentage": <number 0-100 - profit margin as percentage>,
+  "cost_breakdown": {
+    "total_estimated_cost": <number - total cost before profit>,
+    "total_estimated_value": <number - total contract value including profit>,
+    "profit_amount": <number - profit in dollars>,
+    "profit_margin": <number - profit margin percentage>,
+    "tasks": [
+      {
+        "name": "<task name>",
+        "description": "<brief description of work>",
+        "estimated_cost": <number>,
+        "variance": <number - plus/minus variance>
+      }
+    ]
+  }
 }
 
 Match score explanations:
@@ -161,6 +186,16 @@ Recommendation guidelines:
         else:
             company_value_range = "Not specified"
 
+        # Format estimated value
+        if opportunity.estimated_value_low and opportunity.estimated_value_high:
+            estimated_value = f"${opportunity.estimated_value_low:,.0f} - ${opportunity.estimated_value_high:,.0f}"
+        elif opportunity.estimated_value_high:
+            estimated_value = f"Up to ${opportunity.estimated_value_high:,.0f}"
+        elif opportunity.estimated_value_low:
+            estimated_value = f"At least ${opportunity.estimated_value_low:,.0f}"
+        else:
+            estimated_value = "Not specified (estimate based on scope)"
+
         # Build the prompt
         prompt = f"""Please evaluate this government contracting opportunity for my company.
 
@@ -175,6 +210,7 @@ OPPORTUNITY DETAILS:
 - Response Deadline: {opportunity.response_deadline.strftime('%Y-%m-%d') if opportunity.response_deadline else 'Not specified'}
 - Location: {opportunity.place_of_performance_city or 'Unknown'}, {opportunity.place_of_performance_state or 'Unknown'}
 - Type: {opportunity.type or 'Unknown'}
+- Estimated Value: {estimated_value}
 
 COMPANY PROFILE:
 - Name: {company.name}

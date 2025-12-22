@@ -168,7 +168,8 @@ class OpportunityService:
         valid_fields = {
             'opportunity_id', 'company_id', 'fit_score', 'win_probability',
             'recommendation', 'confidence', 'reasoning', 'strengths',
-            'weaknesses', 'executive_summary', 'evaluated_at'
+            'weaknesses', 'executive_summary', 'evaluated_at',
+            'estimated_profit', 'profit_margin_percentage', 'cost_breakdown'
         }
         filtered_data = {k: v for k, v in evaluation_data.items() if k in valid_fields}
 
@@ -202,7 +203,8 @@ class OpportunityService:
         # Filter to valid fields and update
         valid_fields = {
             'fit_score', 'win_probability', 'recommendation', 'confidence',
-            'reasoning', 'strengths', 'weaknesses', 'executive_summary'
+            'reasoning', 'strengths', 'weaknesses', 'executive_summary',
+            'estimated_profit', 'profit_margin_percentage', 'cost_breakdown'
         }
         for key, value in evaluation_data.items():
             if key in valid_fields and hasattr(evaluation, key):

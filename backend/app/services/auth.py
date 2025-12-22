@@ -181,3 +181,56 @@ def reset_password(db: Session, token: str, new_password: str) -> User:
     db.refresh(user)
 
     return user
+
+
+def get_or_create_unsubscribe_token(db: Session, user: User) -> str:
+    """
+    Get existing or create a new unsubscribe token for a user.
+
+    Args:
+        db: Database session
+        user: User to get/create token for
+
+    Returns:
+        Unsubscribe token string
+    """
+    if not user.unsubscribe_token:
+        user.unsubscribe_token = generate_token(32)
+        db.commit()
+        db.refresh(user)
+    return user.unsubscribe_token
+
+
+def unsubscribe_by_token(db: Session, token: str) -> User:
+    """
+    Unsubscribe a user from emails using their unsubscribe token.
+
+    Args:
+        db: Database session
+        token: Unsubscribe token
+
+    Returns:
+        Updated User instance
+
+    Raises:
+        HTTPException: If token is invalid
+    """
+    user = db.query(User).filter(User.unsubscribe_token == token).first()
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Invalid unsubscribe token"
+        )
+
+    # Set email frequency to none (unsubscribed)
+    user.email_frequency = "none"
+    db.commit()
+    db.refresh(user)
+
+    return user
+
+
+def get_user_by_unsubscribe_token(db: Session, token: str) -> Optional[User]:
+    """Get user by unsubscribe token."""
+    return db.query(User).filter(User.unsubscribe_token == token).first()

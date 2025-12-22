@@ -21,6 +21,7 @@ class User(Base):
     last_name = Column(String(100), nullable=True)
     company_id = Column(UUID(as_uuid=True), ForeignKey("companies.id", ondelete="CASCADE"), nullable=True)
     email_frequency = Column(String(20), default="daily", nullable=False)
+    unsubscribe_token = Column(String(64), nullable=True, unique=True, index=True)  # One-click unsubscribe
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     last_login_at = Column(DateTime, nullable=True)
 

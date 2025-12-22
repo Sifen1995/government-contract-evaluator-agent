@@ -1,8 +1,21 @@
 import api from './api';
-import { OpportunityStats, EvaluationListResponse } from '@/types/opportunity';
+import { OpportunityStats, EvaluationListResponse, OpportunityWithEvaluation } from '@/types/opportunity';
 
 export async function getStats(): Promise<OpportunityStats> {
   const response = await api.get('/stats');
+  return response.data;
+}
+
+export async function getOpportunity(id: string): Promise<OpportunityWithEvaluation> {
+  const response = await api.get(`/opportunities/${id}`);
+  return response.data;
+}
+
+export async function updateEvaluation(evaluationId: string, data: {
+  user_saved?: string | null;
+  user_notes?: string;
+}): Promise<any> {
+  const response = await api.put(`/opportunities/evaluations/${evaluationId}`, data);
   return response.data;
 }
 

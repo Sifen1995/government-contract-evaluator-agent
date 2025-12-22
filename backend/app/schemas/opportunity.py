@@ -91,6 +91,10 @@ class EvaluationBase(BaseModel):
     strengths: Optional[List[str]] = Field(None, description="List of strengths")
     weaknesses: Optional[List[str]] = Field(None, description="List of weaknesses")
     executive_summary: Optional[str] = Field(None, description="Executive summary")
+    # Financial Analysis (GovRat parity)
+    estimated_profit: Optional[Decimal] = Field(None, description="Estimated profit amount")
+    profit_margin_percentage: Optional[Decimal] = Field(None, ge=0, le=100, description="Profit margin percentage")
+    cost_breakdown: Optional[Dict[str, Any]] = Field(None, description="Task-level cost breakdown")
 
 
 class EvaluationCreate(EvaluationBase):
@@ -105,6 +109,10 @@ class EvaluationUpdate(BaseModel):
     win_probability: Optional[int] = None
     recommendation: Optional[str] = None
     reasoning: Optional[str] = None
+    # Financial Analysis
+    estimated_profit: Optional[Decimal] = None
+    profit_margin_percentage: Optional[Decimal] = None
+    cost_breakdown: Optional[Dict[str, Any]] = None
 
 
 class EvaluationInDB(EvaluationBase):

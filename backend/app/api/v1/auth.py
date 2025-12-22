@@ -171,3 +171,37 @@ def update_current_user(
     db.refresh(current_user)
 
     return current_user
+
+
+@router.get("/unsubscribe/{token}", response_model=MessageResponse)
+def unsubscribe_get(
+    token: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Unsubscribe from emails using token (GET request for email links).
+
+    - No authentication required
+    - Validates unsubscribe token
+    - Sets user email_frequency to "none"
+    - Returns success message
+    """
+    auth_service.unsubscribe_by_token(db, token)
+    return MessageResponse(message="Successfully unsubscribed from emails")
+
+
+@router.post("/unsubscribe", response_model=MessageResponse)
+def unsubscribe_post(
+    token: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Unsubscribe from emails using token (POST request).
+
+    - No authentication required
+    - Validates unsubscribe token
+    - Sets user email_frequency to "none"
+    - Returns success message
+    """
+    auth_service.unsubscribe_by_token(db, token)
+    return MessageResponse(message="Successfully unsubscribed from emails")
