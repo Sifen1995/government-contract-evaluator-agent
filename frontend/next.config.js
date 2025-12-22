@@ -5,7 +5,7 @@ const nextConfig = {
   // Enable standalone output for production
   output: 'standalone',
   env: {
-    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000',
+    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1',
   },
   // Optimize for production
   poweredByHeader: false,
