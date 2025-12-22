@@ -25,7 +25,7 @@ def list_awards(
     query = db.query(Award)
 
     if agency:
-        query = query.filter(Award.agency.ilike(f"%{agency}%"))
+        query = query.filter(Award.awarding_agency.ilike(f"%{agency}%"))
 
     if naics:
         query = query.filter(Award.naics == naics)
@@ -66,11 +66,11 @@ def award_stats(
     # ---- TOP AGENCIES ----
        top_agencies = (
        db.query(
-            Award.agency,
+            Award.awarding_agency,
             func.count(Award.id).label("count")
         )
-       .filter(Award.agency.isnot(None))
-       .group_by(Award.agency)
+       .filter(Award.awarding_agency.isnot(None))
+       .group_by(Award.awarding_agency)
        .order_by(func.count(Award.id).desc())
        .limit(10)
        .all()
