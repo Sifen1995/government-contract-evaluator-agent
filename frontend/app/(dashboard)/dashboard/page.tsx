@@ -8,6 +8,7 @@ import { getStats, triggerDiscovery } from '@/lib/opportunities'
 import { OpportunityStats } from '@/types/opportunity'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { RecommendedAgencies } from '@/components/agencies'
 
 export default function DashboardPage() {
   const { user, loading, logout } = useAuth()
@@ -239,33 +240,30 @@ export default function DashboardPage() {
           </Card>
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Week 5 Complete! 🎉</CardTitle>
-            <CardDescription>Pipeline management and email notifications are live</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-gray-600 mb-4">
-              You now have access to:
-            </p>
-            <ul className="list-disc list-inside text-sm text-gray-600 space-y-2">
-              <li>Automated SAM.gov opportunity discovery (every 15 minutes)</li>
-              <li>AI-powered evaluation using GPT-4</li>
-              <li>BID/NO_BID/RESEARCH recommendations</li>
-              <li>Fit scores and win probability estimates</li>
-              <li>Detailed analysis with strengths and weaknesses</li>
-              <li>Pipeline management with Kanban-style board (WATCHING → BIDDING → WON/LOST)</li>
-              <li>Filter and sort by AI scores</li>
-              <li>View opportunity details and SAM.gov links</li>
-              <li>Daily email digest with new BID recommendations</li>
-              <li>Deadline reminder emails (1, 3, and 7 days before)</li>
-              <li>Email notification preferences (real-time, daily, weekly, or none)</li>
-            </ul>
-            <p className="text-sm text-gray-500 mt-4">
-              Coming in Week 6: Bug fixes, optimization, and production deployment
-            </p>
-          </CardContent>
-        </Card>
+        <div className="grid md:grid-cols-2 gap-6 mb-6">
+          <RecommendedAgencies limit={5} />
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Platform Features</CardTitle>
+              <CardDescription>What's available to you</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ul className="list-disc list-inside text-sm text-gray-600 space-y-1">
+                <li>Automated SAM.gov opportunity discovery</li>
+                <li>AI-powered evaluation using GPT-4</li>
+                <li>BID/NO_BID/RESEARCH recommendations</li>
+                <li>Fit scores and win probability estimates</li>
+                <li>Pipeline management (WATCHING → BIDDING → WON/LOST)</li>
+                <li>Daily email digest with recommendations</li>
+                <li>Document upload and AI analysis</li>
+                <li>Certification tracking with expiration alerts</li>
+                <li>Past performance management</li>
+                <li>Agency matching and recommendations</li>
+              </ul>
+            </CardContent>
+          </Card>
+        </div>
       </main>
     </div>
   )

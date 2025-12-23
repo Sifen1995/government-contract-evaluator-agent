@@ -11,13 +11,20 @@ import { NativeSelect } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { MultiSelect } from '@/components/ui/multi-select'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { DocumentUpload, DocumentList, CertificationForm, PastPerformanceForm } from '@/components/documents'
+import { BulkRescoreButton } from '@/components/rescoring'
 import { Company } from '@/types/company'
+import { Document, CertificationDocument, PastPerformance } from '@/types/document'
 import { NAICSCode, SetAside, ContractRange, USState } from '@/types/reference'
+import { getDocuments, getCertifications, getPastPerformances } from '@/lib/documents'
+
+type SettingsTab = 'profile' | 'documents' | 'certifications' | 'past-performance' | 'notifications' | 'ai-settings'
 
 export default function SettingsPage() {
   const router = useRouter()
   const { user, loading: authLoading, logout } = useAuth()
 
+  const [activeTab, setActiveTab] = useState<SettingsTab>('profile')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [savingEmail, setSavingEmail] = useState(false)
@@ -32,6 +39,11 @@ export default function SettingsPage() {
   const [contractRanges, setContractRanges] = useState<ContractRange[]>([])
   const [states, setStates] = useState<USState[]>([])
   const [legalStructures, setLegalStructures] = useState<string[]>([])
+
+  // Document data
+  const [documents, setDocuments] = useState<Document[]>([])
+  const [certifications, setCertifications] = useState<CertificationDocument[]>([])
+  const [pastPerformances, setPastPerformances] = useState<PastPerformance[]>([])
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -57,6 +69,21 @@ export default function SettingsPage() {
         // Load user's email preferences
         const userResponse = await api.get('/auth/me')
         setEmailFrequency(userResponse.data.email_frequency || 'daily')
+
+        // Load documents data (optional - may fail if not implemented)
+        try {
+          const [docsResponse, certsResponse, ppResponse] = await Promise.all([
+            getDocuments(),
+            getCertifications(),
+            getPastPerformances(),
+          ])
+          setDocuments(docsResponse.documents || [])
+          setCertifications(certsResponse.certifications || [])
+          setPastPerformances(ppResponse.past_performances || [])
+        } catch (err) {
+          // Silently fail - document features are optional
+          console.log('Document features not yet available')
+        }
       } catch (err: any) {
         if (err.response?.status === 404) {
           router.push('/onboarding')
@@ -105,6 +132,33 @@ export default function SettingsPage() {
     }
   }
 
+  const reloadDocuments = async () => {
+    try {
+      const response = await getDocuments()
+      setDocuments(response.documents || [])
+    } catch (err) {
+      console.error('Error reloading documents:', err)
+    }
+  }
+
+  const reloadCertifications = async () => {
+    try {
+      const response = await getCertifications()
+      setCertifications(response.certifications || [])
+    } catch (err) {
+      console.error('Error reloading certifications:', err)
+    }
+  }
+
+  const reloadPastPerformances = async () => {
+    try {
+      const response = await getPastPerformances()
+      setPastPerformances(response.past_performances || [])
+    } catch (err) {
+      console.error('Error reloading past performances:', err)
+    }
+  }
+
   if (authLoading || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -118,6 +172,15 @@ export default function SettingsPage() {
   const naicsOptions = naicsCodes.map(n => ({ value: n.code, label: `${n.code} - ${n.title}` }))
   const setAsideOptions = setAsides.map(s => ({ value: s.code, label: s.name }))
   const stateOptions = states.map(s => ({ value: s.code, label: s.name }))
+
+  const tabs: { id: SettingsTab; label: string }[] = [
+    { id: 'profile', label: 'Profile' },
+    { id: 'documents', label: 'Documents' },
+    { id: 'certifications', label: 'Certifications' },
+    { id: 'past-performance', label: 'Past Performance' },
+    { id: 'notifications', label: 'Notifications' },
+    { id: 'ai-settings', label: 'AI Settings' },
+  ]
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -157,226 +220,289 @@ export default function SettingsPage() {
           <p className="text-gray-600">Manage your company profile and preferences</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
-              {error}
-            </div>
-          )}
+        {/* Tab Navigation */}
+        <div className="flex gap-1 mb-6 border-b border-gray-200">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
+                activeTab === tab.id
+                  ? 'bg-white border border-b-0 border-gray-200 text-blue-600'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
 
-          {success && (
-            <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded">
-              {success}
-            </div>
-          )}
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-6">
+            {error}
+          </div>
+        )}
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Company Information</CardTitle>
-              <CardDescription>Basic information about your company</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">Company Name *</Label>
-                <Input
-                  id="name"
-                  type="text"
-                  value={company.name}
-                  onChange={(e) => setCompany({ ...company, name: e.target.value })}
-                  required
-                />
-              </div>
+        {success && (
+          <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded mb-6">
+            {success}
+          </div>
+        )}
 
-              <div className="space-y-2">
-                <Label htmlFor="legal_structure">Legal Structure</Label>
-                <NativeSelect
-                  id="legal_structure"
-                  value={company.legal_structure || ''}
-                  onChange={(e) => setCompany({ ...company, legal_structure: e.target.value })}
-                >
-                  <option value="">Select structure...</option>
-                  {legalStructures.map((structure) => (
-                    <option key={structure} value={structure}>
-                      {structure}
-                    </option>
-                  ))}
-                </NativeSelect>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="uei">UEI (Unique Entity Identifier)</Label>
-                <Input
-                  id="uei"
-                  type="text"
-                  placeholder="12-character SAM.gov UEI"
-                  maxLength={12}
-                  value={company.uei || ''}
-                  onChange={(e) => setCompany({ ...company, uei: e.target.value })}
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
+        {/* Profile Tab */}
+        {activeTab === 'profile' && (
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Company Information</CardTitle>
+                <CardDescription>Basic information about your company</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="address_street">Street Address</Label>
+                  <Label htmlFor="name">Company Name *</Label>
                   <Input
-                    id="address_street"
+                    id="name"
                     type="text"
-                    value={company.address_street || ''}
-                    onChange={(e) => setCompany({ ...company, address_street: e.target.value })}
+                    value={company.name}
+                    onChange={(e) => setCompany({ ...company, name: e.target.value })}
+                    required
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="address_city">City</Label>
-                  <Input
-                    id="address_city"
-                    type="text"
-                    value={company.address_city || ''}
-                    onChange={(e) => setCompany({ ...company, address_city: e.target.value })}
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="address_state">State</Label>
+                  <Label htmlFor="legal_structure">Legal Structure</Label>
                   <NativeSelect
-                    id="address_state"
-                    value={company.address_state || ''}
-                    onChange={(e) => setCompany({ ...company, address_state: e.target.value })}
+                    id="legal_structure"
+                    value={company.legal_structure || ''}
+                    onChange={(e) => setCompany({ ...company, legal_structure: e.target.value })}
                   >
-                    <option value="">Select state...</option>
-                    {states.map((state) => (
-                      <option key={state.code} value={state.code}>
-                        {state.name}
+                    <option value="">Select structure...</option>
+                    {legalStructures.map((structure) => (
+                      <option key={structure} value={structure}>
+                        {structure}
                       </option>
                     ))}
                   </NativeSelect>
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="address_zip">ZIP Code</Label>
+                  <Label htmlFor="uei">UEI (Unique Entity Identifier)</Label>
                   <Input
-                    id="address_zip"
+                    id="uei"
                     type="text"
-                    value={company.address_zip || ''}
-                    onChange={(e) => setCompany({ ...company, address_zip: e.target.value })}
+                    placeholder="12-character SAM.gov UEI"
+                    maxLength={12}
+                    value={company.uei || ''}
+                    onChange={(e) => setCompany({ ...company, uei: e.target.value })}
                   />
                 </div>
-              </div>
-            </CardContent>
-          </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>NAICS Codes & Certifications</CardTitle>
-              <CardDescription>Your business classifications and certifications</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label>NAICS Codes (Up to 10)</Label>
-                <MultiSelect
-                  options={naicsOptions}
-                  selected={company.naics_codes}
-                  onChange={(values) => setCompany({ ...company, naics_codes: values })}
-                  placeholder="Search and select NAICS codes..."
-                  maxItems={10}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="address_street">Street Address</Label>
+                    <Input
+                      id="address_street"
+                      type="text"
+                      value={company.address_street || ''}
+                      onChange={(e) => setCompany({ ...company, address_street: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="address_city">City</Label>
+                    <Input
+                      id="address_city"
+                      type="text"
+                      value={company.address_city || ''}
+                      onChange={(e) => setCompany({ ...company, address_city: e.target.value })}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="address_state">State</Label>
+                    <NativeSelect
+                      id="address_state"
+                      value={company.address_state || ''}
+                      onChange={(e) => setCompany({ ...company, address_state: e.target.value })}
+                    >
+                      <option value="">Select state...</option>
+                      {states.map((state) => (
+                        <option key={state.code} value={state.code}>
+                          {state.name}
+                        </option>
+                      ))}
+                    </NativeSelect>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="address_zip">ZIP Code</Label>
+                    <Input
+                      id="address_zip"
+                      type="text"
+                      value={company.address_zip || ''}
+                      onChange={(e) => setCompany({ ...company, address_zip: e.target.value })}
+                    />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>NAICS Codes & Certifications</CardTitle>
+                <CardDescription>Your business classifications and certifications</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label>NAICS Codes (Up to 10)</Label>
+                  <MultiSelect
+                    options={naicsOptions}
+                    selected={company.naics_codes}
+                    onChange={(values) => setCompany({ ...company, naics_codes: values })}
+                    placeholder="Search and select NAICS codes..."
+                    maxItems={10}
+                  />
+                  <p className="text-xs text-gray-500">
+                    Selected: {company.naics_codes.length}/10
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Set-Aside Certifications</Label>
+                  <MultiSelect
+                    options={setAsideOptions}
+                    selected={company.set_asides}
+                    onChange={(values) => setCompany({ ...company, set_asides: values })}
+                    placeholder="Select your certifications..."
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="contract_range">Typical Contract Value Range</Label>
+                  <NativeSelect
+                    id="contract_range"
+                    value={contractRanges.findIndex(r =>
+                      r.min === company.contract_value_min && r.max === company.contract_value_max
+                    ).toString()}
+                    onChange={(e) => {
+                      const range = contractRanges[parseInt(e.target.value)]
+                      if (range) {
+                        setCompany({
+                          ...company,
+                          contract_value_min: range.min,
+                          contract_value_max: range.max
+                        })
+                      }
+                    }}
+                  >
+                    <option value="-1">Select range...</option>
+                    {contractRanges.map((range, index) => (
+                      <option key={range.label} value={index}>
+                        {range.label}
+                      </option>
+                    ))}
+                  </NativeSelect>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Geographic Preferences</Label>
+                  <MultiSelect
+                    options={[
+                      { value: 'Nationwide', label: 'Nationwide' },
+                      ...stateOptions
+                    ]}
+                    selected={company.geographic_preferences}
+                    onChange={(values) => setCompany({ ...company, geographic_preferences: values })}
+                    placeholder="Select states or Nationwide..."
+                  />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Capabilities Statement</CardTitle>
+                <CardDescription>Your company's core competencies and strengths</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  <Textarea
+                    rows={12}
+                    value={company.capabilities || ''}
+                    onChange={(e) => setCompany({ ...company, capabilities: e.target.value })}
+                    placeholder="Describe your company's core competencies..."
+                  />
+                  <p className="text-xs text-gray-500">
+                    {company.capabilities?.split(/\s+/).filter(Boolean).length || 0}/500 words
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+
+            <div className="flex justify-end gap-4">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => router.push('/dashboard')}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={saving}>
+                {saving ? 'Saving...' : 'Save Changes'}
+              </Button>
+            </div>
+          </form>
+        )}
+
+        {/* Documents Tab */}
+        {activeTab === 'documents' && (
+          <div className="space-y-6">
+            <DocumentUpload
+              documentType="capability_statement"
+              title="Capability Statement"
+              description="Upload your company's capability statement PDF for AI analysis"
+              onUploadComplete={reloadDocuments}
+            />
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Uploaded Documents</CardTitle>
+                <CardDescription>Manage your uploaded documents</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <DocumentList
+                  documents={documents}
+                  onDocumentDeleted={reloadDocuments}
                 />
-                <p className="text-xs text-gray-500">
-                  Selected: {company.naics_codes.length}/10
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Set-Aside Certifications</Label>
-                <MultiSelect
-                  options={setAsideOptions}
-                  selected={company.set_asides}
-                  onChange={(values) => setCompany({ ...company, set_asides: values })}
-                  placeholder="Select your certifications..."
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="contract_range">Typical Contract Value Range</Label>
-                <NativeSelect
-                  id="contract_range"
-                  value={contractRanges.findIndex(r =>
-                    r.min === company.contract_value_min && r.max === company.contract_value_max
-                  ).toString()}
-                  onChange={(e) => {
-                    const range = contractRanges[parseInt(e.target.value)]
-                    if (range) {
-                      setCompany({
-                        ...company,
-                        contract_value_min: range.min,
-                        contract_value_max: range.max
-                      })
-                    }
-                  }}
-                >
-                  <option value="-1">Select range...</option>
-                  {contractRanges.map((range, index) => (
-                    <option key={range.label} value={index}>
-                      {range.label}
-                    </option>
-                  ))}
-                </NativeSelect>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Geographic Preferences</Label>
-                <MultiSelect
-                  options={[
-                    { value: 'Nationwide', label: 'Nationwide' },
-                    ...stateOptions
-                  ]}
-                  selected={company.geographic_preferences}
-                  onChange={(values) => setCompany({ ...company, geographic_preferences: values })}
-                  placeholder="Select states or Nationwide..."
-                />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Capabilities Statement</CardTitle>
-              <CardDescription>Your company's core competencies and strengths</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                <Textarea
-                  rows={12}
-                  value={company.capabilities || ''}
-                  onChange={(e) => setCompany({ ...company, capabilities: e.target.value })}
-                  placeholder="Describe your company's core competencies..."
-                />
-                <p className="text-xs text-gray-500">
-                  {company.capabilities?.split(/\s+/).filter(Boolean).length || 0}/500 words
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-
-          <div className="flex justify-end gap-4">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => router.push('/dashboard')}
-            >
-              Cancel
-            </Button>
-            <Button type="submit" disabled={saving}>
-              {saving ? 'Saving...' : 'Save Changes'}
-            </Button>
+              </CardContent>
+            </Card>
           </div>
-        </form>
+        )}
 
-        {/* Email Preferences Section */}
-        <div className="mt-8 pt-8 border-t border-gray-200">
-          <h3 className="text-xl font-semibold text-gray-900 mb-4">Email Notifications</h3>
+        {/* Certifications Tab */}
+        {activeTab === 'certifications' && (
+          <div className="space-y-6">
+            <CertificationForm
+              certifications={certifications}
+              onCertificationChange={reloadCertifications}
+            />
+          </div>
+        )}
 
+        {/* Past Performance Tab */}
+        {activeTab === 'past-performance' && (
+          <div className="space-y-6">
+            <PastPerformanceForm
+              records={pastPerformances}
+              onRecordChange={reloadPastPerformances}
+            />
+          </div>
+        )}
+
+        {/* Notifications Tab */}
+        {activeTab === 'notifications' && (
           <Card>
             <CardHeader>
               <CardTitle>Notification Preferences</CardTitle>
@@ -465,7 +591,34 @@ export default function SettingsPage() {
               </div>
             </CardContent>
           </Card>
-        </div>
+        )}
+
+        {/* AI Settings Tab */}
+        {activeTab === 'ai-settings' && (
+          <div className="space-y-6">
+            <BulkRescoreButton />
+
+            <Card>
+              <CardHeader>
+                <CardTitle>AI Evaluation Settings</CardTitle>
+                <CardDescription>Configure how AI evaluates opportunities for your company</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-gray-600">
+                  AI evaluations are automatically updated when you change your company profile.
+                  The AI considers your NAICS codes, certifications, capabilities, and past performance
+                  when scoring opportunities.
+                </p>
+                <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                  <p className="text-sm text-blue-800">
+                    <strong>Tip:</strong> Keep your profile up to date for the most accurate AI recommendations.
+                    Upload your capability statement and past performance documents to improve scoring accuracy.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
       </main>
     </div>
   )

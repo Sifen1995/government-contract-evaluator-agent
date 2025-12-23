@@ -138,6 +138,21 @@ Create a `.env` file in the `backend/` directory (copy from `.env.example`):
 - `EMAIL_MODE` - `console` for dev, `sendgrid` for production
 - `DEBUG` - Set to `false` in production
 
+## Production URLs
+
+| Service | URL |
+|---------|-----|
+| Frontend (CloudFront) | https://d246k2epie5kxs.cloudfront.net |
+| Backend API (CloudFront) | https://d1ntjd1d3nmhbf.cloudfront.net |
+| Backend API (Direct EC2) | http://ec2-35-173-103-83.compute-1.amazonaws.com:8000 |
+
+### Demo Credentials
+
+- **Email:** `testuser@techgov.com`
+- **Password:** `Test123!@#`
+
+(Created via `python backend/seed_sample_data.py`)
+
 ## Production Deployment
 
 See `DEPLOYMENT.md` for production setup on EC2 with systemd services, cron jobs, and Nginx configuration.

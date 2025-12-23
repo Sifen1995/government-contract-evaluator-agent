@@ -10,6 +10,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { OpportunityContacts } from '@/components/agencies'
+import { StaleEvaluationBanner } from '@/components/rescoring'
 
 export default function OpportunityDetailPage() {
   const { user, loading } = useAuth()
@@ -141,31 +143,38 @@ export default function OpportunityDetailPage() {
 
         {/* AI Evaluation */}
         {evaluation && (
-          <Card className="my-6 border-blue-200 bg-blue-50">
-            <CardHeader>
-              <div className="flex justify-between">
-                <div>
-                  <CardTitle>AI Evaluation</CardTitle>
-                  <CardDescription>Automated scoring</CardDescription>
+          <>
+            <StaleEvaluationBanner
+              evaluationId={evaluation.id}
+              isStale={(evaluation as any).is_stale || false}
+              onRefreshComplete={() => loadOpportunity()}
+            />
+            <Card className="my-6 border-blue-200 bg-blue-50">
+              <CardHeader>
+                <div className="flex justify-between">
+                  <div>
+                    <CardTitle>AI Evaluation</CardTitle>
+                    <CardDescription>Automated scoring</CardDescription>
+                  </div>
+                  <Badge className={getRecommendationColor(evaluation.recommendation)}>
+                    {evaluation.recommendation}
+                  </Badge>
                 </div>
-                <Badge className={getRecommendationColor(evaluation.recommendation)}>
-                  {evaluation.recommendation}
-                </Badge>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="grid md:grid-cols-2 gap-6">
-                <div>
-                  <div className="text-sm text-gray-500">Fit Score</div>
-                  <div className="text-4xl font-bold">{evaluation.fit_score}%</div>
+              </CardHeader>
+              <CardContent>
+                <div className="grid md:grid-cols-2 gap-6">
+                  <div>
+                    <div className="text-sm text-gray-500">Fit Score</div>
+                    <div className="text-4xl font-bold">{evaluation.fit_score}%</div>
+                  </div>
+                  <div>
+                    <div className="text-sm text-gray-500">Win Probability</div>
+                    <div className="text-4xl font-bold">{evaluation.win_probability}%</div>
+                  </div>
                 </div>
-                <div>
-                  <div className="text-sm text-gray-500">Win Probability</div>
-                  <div className="text-4xl font-bold">{evaluation.win_probability}%</div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          </>
         )}
 
         {/* MAIN GRID */}
@@ -262,6 +271,16 @@ export default function OpportunityDetailPage() {
                 </CardContent>
               </Card>
             )}
+
+            {/* Recommended Contacts */}
+            <OpportunityContacts
+              opportunityId={id}
+              contractingOfficer={{
+                name: opportunity.primary_contact_name,
+                email: opportunity.primary_contact_email,
+                phone: opportunity.primary_contact_phone,
+              }}
+            />
           </div>
         </div>
       </main>

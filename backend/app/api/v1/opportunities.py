@@ -96,6 +96,110 @@ async def get_opportunity(
         raise HTTPException(status_code=500, detail="Failed to get opportunity")
 
 
+@router.get("/opportunities/{opportunity_id}/contacts")
+async def get_opportunity_contacts(
+    opportunity_id: str,
+    db: Session = Depends(get_db),
+):
+    """
+    Get recommended contacts for an opportunity.
+
+    Returns:
+    - contracting_officer: The contracting officer from the opportunity (if available)
+    - osdbu_contact: The OSDBU contact for the issuing agency (if available)
+    - industry_liaison: The industry liaison for the agency (if available)
+    - agency: The issuing agency details (if found)
+    """
+    from app.models.agency import Agency, GovernmentContact
+
+    try:
+        opportunity = opportunity_service.get_opportunity_by_id(db, opportunity_id)
+        if not opportunity:
+            raise HTTPException(status_code=404, detail="Opportunity not found")
+
+        result = {
+            "contracting_officer": None,
+            "osdbu_contact": None,
+            "industry_liaison": None,
+            "agency": None
+        }
+
+        # Try to find the agency in our database
+        agency = None
+        if opportunity.issuing_agency:
+            # Try to match by name or abbreviation
+            agency = db.query(Agency).filter(
+                (Agency.name.ilike(f"%{opportunity.issuing_agency}%")) |
+                (Agency.abbreviation.ilike(f"%{opportunity.issuing_agency}%"))
+            ).first()
+
+        if agency:
+            result["agency"] = {
+                "id": str(agency.id),
+                "name": agency.name,
+                "abbreviation": agency.abbreviation,
+                "small_business_url": agency.small_business_url,
+                "forecast_url": agency.forecast_url,
+                "vendor_portal_url": agency.vendor_portal_url
+            }
+
+            # Get OSDBU contact for this agency
+            osdbu_contact = db.query(GovernmentContact).filter(
+                GovernmentContact.agency_id == agency.id,
+                GovernmentContact.contact_type == "osdbu",
+                GovernmentContact.is_active == True
+            ).first()
+
+            if osdbu_contact:
+                result["osdbu_contact"] = {
+                    "id": str(osdbu_contact.id),
+                    "first_name": osdbu_contact.first_name,
+                    "last_name": osdbu_contact.last_name,
+                    "title": osdbu_contact.title,
+                    "email": osdbu_contact.email,
+                    "phone": osdbu_contact.phone,
+                    "contact_type": osdbu_contact.contact_type
+                }
+
+            # Get industry liaison if available
+            industry_liaison = db.query(GovernmentContact).filter(
+                GovernmentContact.agency_id == agency.id,
+                GovernmentContact.contact_type == "industry_liaison",
+                GovernmentContact.is_active == True
+            ).first()
+
+            if industry_liaison:
+                result["industry_liaison"] = {
+                    "id": str(industry_liaison.id),
+                    "first_name": industry_liaison.first_name,
+                    "last_name": industry_liaison.last_name,
+                    "title": industry_liaison.title,
+                    "email": industry_liaison.email,
+                    "phone": industry_liaison.phone,
+                    "contact_type": industry_liaison.contact_type
+                }
+
+        # Include opportunity's primary contact as contracting officer
+        if opportunity.primary_contact_name or opportunity.primary_contact_email:
+            result["contracting_officer"] = {
+                "id": None,
+                "first_name": opportunity.primary_contact_name.split()[0] if opportunity.primary_contact_name else None,
+                "last_name": " ".join(opportunity.primary_contact_name.split()[1:]) if opportunity.primary_contact_name and len(opportunity.primary_contact_name.split()) > 1 else None,
+                "title": "Contracting Officer",
+                "email": opportunity.primary_contact_email,
+                "phone": opportunity.primary_contact_phone,
+                "contact_type": "contracting_officer"
+            }
+
+        return result
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting opportunity contacts: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to get opportunity contacts")
+
+
 # Evaluation endpoints
 
 @router.get("/evaluations", response_model=EvaluationListResponse)
@@ -326,7 +430,7 @@ async def list_pipeline(
         total = query.count()
 
         # Get evaluations with pagination
-        evaluations = query.order_by(Evaluation.updated_at.desc()).offset(skip).limit(limit).all()
+        evaluations = query.order_by(Evaluation.evaluated_at.desc()).offset(skip).limit(limit).all()
 
         # Load opportunities for each evaluation
         results = []
@@ -475,7 +579,7 @@ async def evaluate_opportunity_lazy(
             }
 
         # Compute instant rule-based match scores
-        match_scores = match_scoring_service.compute_score(opportunity, company)
+        match_scores = match_scoring_service.compute_score(opportunity, company, db)
 
         # Cache the match scores
         try:
@@ -585,7 +689,7 @@ async def get_match_score(
             }
 
         # Compute fresh scores
-        scores = match_scoring_service.compute_score(opportunity, company)
+        scores = match_scoring_service.compute_score(opportunity, company, db)
 
         # Cache for future requests
         try:

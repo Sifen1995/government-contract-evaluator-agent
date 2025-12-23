@@ -38,4 +38,12 @@ LOG_DIR=/var/log/govai
 # DC Independent – hourly (offset)
 15 * * * * cd /opt/govai/backend && python scripts/discover_dc_independent.py >> logs/dc_independent.log 2>&1
 
+# Document text extraction – every 5 minutes
+*/5 * * * * cd $GOVAI_DIR && $VENV_PYTHON scripts/extract_documents.py >> $LOG_DIR/extraction.log 2>&1
+
+# Certification expiration reminders – daily at 10 AM UTC
+0 10 * * * cd $GOVAI_DIR && $VENV_PYTHON scripts/send_certification_reminders.py >> $LOG_DIR/email.log 2>&1
+
+# OSDBU directory import – monthly on the 1st at 3 AM UTC
+0 3 1 * * cd $GOVAI_DIR && $VENV_PYTHON scripts/import_osdbu_contacts.py >> $LOG_DIR/import.log 2>&1
 

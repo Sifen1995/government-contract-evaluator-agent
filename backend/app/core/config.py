@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     JWT_EXPIRY_HOURS: int = 24
 
     # CORS
-    CORS_ORIGINS: str = "http://localhost:3000"
+    CORS_ORIGINS: str = "http://localhost:3000,http://localhost:3001"
 
     # URLs
     API_URL: str = "http://localhost:8000"
@@ -35,6 +35,13 @@ class Settings(BaseSettings):
     # External APIs
     SAM_API_KEY: str = ""
     OPENAI_API_KEY: str = ""
+
+    # AWS S3 for document storage
+    AWS_ACCESS_KEY_ID: str = ""
+    AWS_SECRET_ACCESS_KEY: str = ""
+    AWS_REGION: str = "us-east-1"
+    S3_BUCKET_NAME: str = "govai-documents"
+    S3_PRESIGNED_URL_EXPIRY: int = 900  # 15 minutes in seconds
 
     @field_validator('JWT_SECRET')
     @classmethod

@@ -5,6 +5,8 @@ from .evaluation import Evaluation
 from .discovery_run import DiscoveryRun
 from .company_opportunity_score import CompanyOpportunityScore
 from .award import Award
+from .document import Document, DocumentVersion, CertificationDocument, PastPerformance
+from .agency import Agency, GovernmentContact, CompanyAgencyMatch
 
 __all__ = [
     "User",
@@ -13,5 +15,12 @@ __all__ = [
     "Evaluation",
     "DiscoveryRun",
     "CompanyOpportunityScore",
-    "Award"
+    "Award",
+    "Document",
+    "DocumentVersion",
+    "CertificationDocument",
+    "PastPerformance",
+    "Agency",
+    "GovernmentContact",
+    "CompanyAgencyMatch",
 ]

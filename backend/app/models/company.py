@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, DateTime, Text, DECIMAL, ARRAY
+from sqlalchemy import Column, String, DateTime, Text, DECIMAL, ARRAY, Integer
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from datetime import datetime
@@ -23,11 +23,16 @@ class Company(Base):
     contract_value_min = Column(DECIMAL(15, 2), nullable=True)
     contract_value_max = Column(DECIMAL(15, 2), nullable=True)
     geographic_preferences = Column(ARRAY(Text), default=list, nullable=True)  # States or "Nationwide"
+    profile_version = Column(Integer, default=1, nullable=False)  # Increments on scoring-relevant changes
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
     # Relationships
     users = relationship("User", back_populates="company")
+    documents = relationship("Document", back_populates="company", cascade="all, delete-orphan")
+    certification_documents = relationship("CertificationDocument", back_populates="company", cascade="all, delete-orphan")
+    past_performance_records = relationship("PastPerformance", back_populates="company", cascade="all, delete-orphan")
+    agency_matches = relationship("CompanyAgencyMatch", back_populates="company", cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<Company {self.name}>"

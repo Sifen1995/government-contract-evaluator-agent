@@ -34,6 +34,13 @@ class Evaluation(Base):
     profit_margin_percentage = Column(Numeric(5, 2), nullable=True)  # Profit margin %
     cost_breakdown = Column(JSONB, nullable=True)  # Task-level cost breakdown
 
+    # User Pipeline Status
+    user_saved = Column(String(20), nullable=True, index=True)  # "WATCHING", "BIDDING", "PASSED", "WON", "LOST"
+    user_notes = Column(Text, nullable=True)  # User notes for pipeline
+
+    # Profile Version Tracking (for dynamic re-scoring)
+    profile_version_at_evaluation = Column(Integer, nullable=True)  # Profile version when evaluation was created
+
     # Timestamp
     evaluated_at = Column(DateTime(timezone=True), default=datetime.utcnow, nullable=True)
 
@@ -52,3 +59,12 @@ class Evaluation(Base):
 
     def __repr__(self):
         return f"<Evaluation {self.id}: {self.recommendation} ({self.fit_score}% fit)>"
+
+    @property
+    def is_stale(self) -> bool:
+        """Check if evaluation is based on an old profile version."""
+        if self.profile_version_at_evaluation is None:
+            return True  # Legacy evaluation without version tracking
+        if not self.company:
+            return False
+        return self.profile_version_at_evaluation < self.company.profile_version
