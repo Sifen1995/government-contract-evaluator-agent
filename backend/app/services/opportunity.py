@@ -51,7 +51,7 @@ class OpportunityService:
         ).first()
 
         if existing:
-            logger.info(f"Opportunity {opportunity_data.get('notice_id')} already exists, updating...")
+            logger.info(f"Opportunity {opportunity_data.get('source_id')} already exists, updating...")
             return self.update_opportunity(db, existing.id, opportunity_data)
 
         opportunity = Opportunity(**opportunity_data)
@@ -59,7 +59,7 @@ class OpportunityService:
         db.commit()
         db.refresh(opportunity)
 
-        logger.info(f"Created opportunity {opportunity.notice_id}")
+        logger.info(f"Created opportunity {opportunity.source_id}")
         return opportunity
 
     def update_opportunity(self, db: Session, opportunity_id: str, opportunity_data: Dict) -> Opportunity:
@@ -87,7 +87,7 @@ class OpportunityService:
         db.commit()
         db.refresh(opportunity)
 
-        logger.info(f"Updated opportunity {opportunity.notice_id}")
+        logger.info(f"Updated opportunity {opportunity.source_id}")
         return opportunity
 
     def get_opportunity_by_id(self, db: Session, opportunity_id: str) -> Optional[Opportunity]:

@@ -410,47 +410,42 @@ class SAMGovService:
             award_number = raw_data.get("award", {}).get("number", "")
 
             return {
-                "notice_id": notice_id,
-                "solicitation_number": solicitation_number,
+                "source": "sam_gov",
+                "source_id": notice_id,
                 "title": title,
                 "description": description,
-                "department": department,
-                "sub_tier": sub_tier,
-                "office": office,
+                "issuing_agency": department,
+                "issuing_sub_agency": sub_tier,
+                "issuing_office": office,
                 "naics_code": naics_code,
-                "naics_description": naics_description,
                 "psc_code": psc_code,
-                "set_aside": set_aside,
-                "contract_value": award_amount,
+                "set_aside_type": set_aside,
+                "notice_type": opportunity_type,
                 "posted_date": posted_date,
                 "response_deadline": response_deadline,
-                "archive_date": archive_date,
-                "place_of_performance_city": pop_city,
-                "place_of_performance_state": pop_state,
-                "place_of_performance_zip": pop_zip,
-                "place_of_performance_country": pop_country,
-                "primary_contact_name": primary_contact_name,
-                "primary_contact_email": primary_contact_email,
-                "primary_contact_phone": primary_contact_phone,
-                "link": link,
-                "attachment_links": attachment_links,
-                "type": opportunity_type,
-                "award_number": award_number,
-                "award_amount": award_amount,
+                "pop_city": pop_city,
+                "pop_state": pop_state,
+                "pop_zip": pop_zip,
+                "contact_name": primary_contact_name,
+                "contact_email": primary_contact_email,
+                "contact_phone": primary_contact_phone,
+                "source_url": link,
+                "attachments": attachment_links if attachment_links else None,
+                "estimated_value_low": award_amount,
+                "estimated_value_high": award_amount,
                 "raw_data": raw_data,
-                "is_active": True,
-                "last_synced_at": datetime.utcnow()
+                "status": "active"
             }
 
         except Exception as e:
             logger.error(f"Error parsing opportunity {raw_data.get('noticeId', 'unknown')}: {str(e)}")
             # Return minimal data so we don't lose the opportunity
             return {
-                "notice_id": raw_data.get("noticeId", ""),
+                "source": "sam_gov",
+                "source_id": raw_data.get("noticeId", ""),
                 "title": raw_data.get("title", "Unknown"),
                 "raw_data": raw_data,
-                "is_active": True,
-                "last_synced_at": datetime.utcnow()
+                "status": "active"
             }
 
     def _parse_date(self, date_str: Optional[str]) -> Optional[datetime]:

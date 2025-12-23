@@ -76,7 +76,7 @@ class AIEvaluatorService:
             evaluation_data["evaluation_time_seconds"] = round(evaluation_time, 2)
 
             logger.info(
-                f"Evaluated opportunity {opportunity.notice_id} for company {company.id}: "
+                f"Evaluated opportunity {opportunity.source_id} for company {company.id}: "
                 f"{evaluation_data.get('recommendation')} (fit: {evaluation_data.get('fit_score')}%)"
             )
 
@@ -200,16 +200,16 @@ Recommendation guidelines:
         prompt = f"""Please evaluate this government contracting opportunity for my company.
 
 OPPORTUNITY DETAILS:
-- Notice ID: {opportunity.notice_id}
+- Notice ID: {opportunity.source_id}
 - Title: {opportunity.title}
 - Description: {opportunity.description or 'Not provided'}
-- Department: {opportunity.department or 'Unknown'}
-- Office: {opportunity.office or 'Unknown'}
-- NAICS Code: {opportunity.naics_code} - {opportunity.naics_description or 'Unknown'}
-- Set-Aside: {opportunity.set_aside or 'Full and Open Competition (no set-aside)'}
+- Agency: {opportunity.issuing_agency or 'Unknown'}
+- Office: {opportunity.issuing_office or 'Unknown'}
+- NAICS Code: {opportunity.naics_code or 'Unknown'}
+- Set-Aside: {opportunity.set_aside_type or 'Full and Open Competition (no set-aside)'}
 - Response Deadline: {opportunity.response_deadline.strftime('%Y-%m-%d') if opportunity.response_deadline else 'Not specified'}
-- Location: {opportunity.place_of_performance_city or 'Unknown'}, {opportunity.place_of_performance_state or 'Unknown'}
-- Type: {opportunity.type or 'Unknown'}
+- Location: {opportunity.pop_city or 'Unknown'}, {opportunity.pop_state or 'Unknown'}
+- Type: {opportunity.notice_type or 'Unknown'}
 - Estimated Value: {estimated_value}
 
 COMPANY PROFILE:
@@ -274,7 +274,7 @@ Please provide your evaluation in the specified JSON format."""
             evaluation_data["evaluated_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
             logger.info(
-                f"Generic evaluation of {opportunity.notice_id}: "
+                f"Generic evaluation of {opportunity.source_id}: "
                 f"quality={evaluation_data.get('opportunity_quality')}, "
                 f"complexity={evaluation_data.get('complexity_level')}"
             )
@@ -332,17 +332,17 @@ Quality scoring:
         return f"""Please evaluate this government contracting opportunity.
 
 OPPORTUNITY DETAILS:
-- Notice ID: {opportunity.notice_id}
+- Notice ID: {opportunity.source_id}
 - Title: {opportunity.title}
 - Description: {description}
-- Department/Agency: {opportunity.department or 'Unknown'} / {opportunity.sub_agency or 'Unknown'}
-- Office: {opportunity.office or 'Unknown'}
-- NAICS Code: {opportunity.naics_code} - {opportunity.naics_description or 'Unknown'}
+- Agency: {opportunity.issuing_agency or 'Unknown'} / {opportunity.issuing_sub_agency or 'Unknown'}
+- Office: {opportunity.issuing_office or 'Unknown'}
+- NAICS Code: {opportunity.naics_code or 'Unknown'}
 - PSC Code: {opportunity.psc_code or 'Unknown'}
-- Set-Aside Type: {opportunity.set_aside or 'Full and Open Competition'}
-- Notice Type: {opportunity.type or 'Unknown'}
+- Set-Aside Type: {opportunity.set_aside_type or 'Full and Open Competition'}
+- Notice Type: {opportunity.notice_type or 'Unknown'}
 - Response Deadline: {opportunity.response_deadline.strftime('%Y-%m-%d') if opportunity.response_deadline else 'Not specified'}
-- Location: {opportunity.place_of_performance_city or 'Unknown'}, {opportunity.place_of_performance_state or 'Unknown'}
+- Location: {opportunity.pop_city or 'Unknown'}, {opportunity.pop_state or 'Unknown'}
 - Estimated Value: ${opportunity.estimated_value_low or 0:,.0f} - ${opportunity.estimated_value_high or 0:,.0f}
 
 Provide a generic evaluation of this opportunity's quality and requirements."""
@@ -368,9 +368,9 @@ Provide a generic evaluation of this opportunity's quality and requirements."""
 
         # Set-aside match
         set_aside_match = 1  # Default to match if no set-aside
-        if opportunity.set_aside and opportunity.set_aside != "Full and Open Competition":
+        if opportunity.set_aside_type and opportunity.set_aside_type != "Full and Open Competition":
             # Normalize set-aside names
-            opp_set_aside = opportunity.set_aside.lower()
+            opp_set_aside = opportunity.set_aside_type.lower()
             company_set_asides_lower = [s.lower() for s in (company.set_asides or [])]
 
             if any(s in opp_set_aside for s in ["8(a)", "8a"]):
@@ -391,13 +391,14 @@ Provide a generic evaluation of this opportunity's quality and requirements."""
         geo_prefs = company.geographic_preferences or []
         if "Nationwide" in geo_prefs:
             geographic_match = 1
-        elif opportunity.place_of_performance_state and opportunity.place_of_performance_state in geo_prefs:
+        elif opportunity.pop_state and opportunity.pop_state in geo_prefs:
             geographic_match = 1
 
         # Contract value match
         contract_value_match = 0
-        if opportunity.contract_value and company.contract_value_min and company.contract_value_max:
-            if company.contract_value_min <= opportunity.contract_value <= company.contract_value_max:
+        estimated_value = opportunity.estimated_value_high or opportunity.estimated_value_low
+        if estimated_value and company.contract_value_min and company.contract_value_max:
+            if company.contract_value_min <= float(estimated_value) <= company.contract_value_max:
                 contract_value_match = 1
 
         return {
