@@ -133,3 +133,67 @@ export async function updatePastPerformance(id: string, data: PastPerformanceUpd
 export async function deletePastPerformance(id: string): Promise<void> {
   await api.delete(`/past-performance/${id}`);
 }
+
+// Document suggestion types
+export interface SuggestedNAICS {
+  code: string;
+  description?: string;
+  confidence?: number;
+}
+
+export interface SuggestedCertification {
+  certification_type: string;
+  expiration_date?: string;
+  confidence?: number;
+}
+
+export interface DocumentSuggestionsResponse {
+  document_id: string;
+  extraction_status: 'pending' | 'processing' | 'completed' | 'failed';
+  ocr_confidence?: number;
+  ocr_quality?: 'good' | 'fair' | 'poor';
+  is_scanned: boolean;
+  suggestions_reviewed: boolean;
+  naics_codes: SuggestedNAICS[];
+  certifications: SuggestedCertification[];
+  capabilities?: string;
+  agencies: string[];
+  locations: string[];
+  contract_values: string[];
+  raw_entities?: Record<string, unknown>;
+}
+
+export interface ApplySuggestionsRequest {
+  naics_codes?: string[];
+  certifications?: string[];
+  capabilities?: string;
+  append_capabilities?: boolean;
+  geographic_preferences?: string[];
+}
+
+export interface ApplySuggestionsResponse {
+  naics_codes_added: number;
+  certifications_created: number;
+  capabilities_updated: boolean;
+  geographic_preferences_added: number;
+  profile_version: number;
+  message: string;
+}
+
+// Document suggestion endpoints
+export async function getDocumentSuggestions(documentId: string): Promise<DocumentSuggestionsResponse> {
+  const response = await api.get(`/documents/${documentId}/suggestions`);
+  return response.data;
+}
+
+export async function applyDocumentSuggestions(
+  documentId: string,
+  data: ApplySuggestionsRequest
+): Promise<ApplySuggestionsResponse> {
+  const response = await api.post(`/documents/${documentId}/apply-suggestions`, data);
+  return response.data;
+}
+
+export async function markSuggestionsReviewed(documentId: string): Promise<void> {
+  await api.post(`/documents/${documentId}/mark-reviewed`);
+}

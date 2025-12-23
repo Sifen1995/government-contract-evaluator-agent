@@ -235,3 +235,62 @@ class PastPerformanceListResponse(BaseModel):
     """Response for listing past performance records."""
     records: List[PastPerformanceResponse]
     total: int
+
+
+# ============== Document Suggestion Schemas ==============
+
+class SuggestedNAICS(BaseModel):
+    """A suggested NAICS code extracted from document."""
+    code: str
+    description: Optional[str] = None
+    confidence: Optional[float] = None
+
+
+class SuggestedCertification(BaseModel):
+    """A suggested certification extracted from document."""
+    certification_type: str
+    expiration_date: Optional[date] = None
+    confidence: Optional[float] = None
+
+
+class DocumentSuggestionsResponse(BaseModel):
+    """Response with extracted suggestions for company profile."""
+    document_id: UUID
+    extraction_status: ExtractionStatus
+    ocr_confidence: Optional[float] = None
+    ocr_quality: Optional[str] = None  # good, fair, poor
+    is_scanned: bool = False
+    suggestions_reviewed: bool = False
+
+    # Suggestions
+    naics_codes: List[SuggestedNAICS] = []
+    certifications: List[SuggestedCertification] = []
+    capabilities: Optional[str] = None
+    agencies: List[str] = []
+    locations: List[str] = []
+    contract_values: List[str] = []
+
+    # Raw extracted entities for reference
+    raw_entities: Optional[dict] = None
+
+    class Config:
+        from_attributes = True
+
+
+class ApplySuggestionsRequest(BaseModel):
+    """Request to apply selected suggestions to company profile."""
+    naics_codes: Optional[List[str]] = Field(None, description="NAICS codes to add to profile")
+    certifications: Optional[List[str]] = Field(None, description="Certification types to create")
+    capabilities: Optional[str] = Field(None, description="Capabilities text to append/replace")
+    append_capabilities: bool = Field(True, description="Append to existing capabilities (vs replace)")
+    geographic_preferences: Optional[List[str]] = Field(None, description="States to add")
+
+
+class ApplySuggestionsResponse(BaseModel):
+    """Response after applying suggestions."""
+    naics_codes_added: int = 0
+    certifications_created: int = 0
+    capabilities_updated: bool = False
+    geographic_preferences_added: int = 0
+    profile_version: int
+    message: str

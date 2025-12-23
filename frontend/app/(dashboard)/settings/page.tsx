@@ -11,7 +11,7 @@ import { NativeSelect } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { MultiSelect } from '@/components/ui/multi-select'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { DocumentUpload, DocumentList, CertificationForm, PastPerformanceForm } from '@/components/documents'
+import { DocumentUpload, DocumentList, CertificationForm, PastPerformanceForm, DocumentSuggestions } from '@/components/documents'
 import { BulkRescoreButton } from '@/components/rescoring'
 import { Company } from '@/types/company'
 import { Document, CertificationDocument, PastPerformance } from '@/types/document'
@@ -44,6 +44,9 @@ export default function SettingsPage() {
   const [documents, setDocuments] = useState<Document[]>([])
   const [certifications, setCertifications] = useState<CertificationDocument[]>([])
   const [pastPerformances, setPastPerformances] = useState<PastPerformance[]>([])
+
+  // Suggestions review state
+  const [selectedDocumentForSuggestions, setSelectedDocumentForSuggestions] = useState<Document | null>(null)
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -159,6 +162,41 @@ export default function SettingsPage() {
     }
   }
 
+  const handleViewSuggestions = (doc: Document) => {
+    setSelectedDocumentForSuggestions(doc)
+  }
+
+  const handleSuggestionsApplied = async () => {
+    // Reload documents to update suggestions_reviewed status
+    await reloadDocuments()
+    // Reload company profile to show updated data
+    try {
+      const companyResponse = await api.get('/company/me')
+      setCompany(companyResponse.data)
+    } catch (err) {
+      console.error('Error reloading company:', err)
+    }
+    setSelectedDocumentForSuggestions(null)
+    setSuccess('Suggestions applied to your company profile!')
+  }
+
+  const handleSuggestionsDismissed = async () => {
+    await reloadDocuments()
+    setSelectedDocumentForSuggestions(null)
+  }
+
+  const handleExtractionComplete = async (doc: Document) => {
+    // Reload documents to show the new extraction status
+    await reloadDocuments()
+    // Auto-select the document for suggestions review
+    setSelectedDocumentForSuggestions(doc)
+  }
+
+  // Count documents with pending suggestions
+  const pendingSuggestionsCount = documents.filter(
+    d => d.extraction_status === 'completed' && d.suggestions_reviewed === false
+  ).length
+
   if (authLoading || loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -173,9 +211,9 @@ export default function SettingsPage() {
   const setAsideOptions = setAsides.map(s => ({ value: s.code, label: s.name }))
   const stateOptions = states.map(s => ({ value: s.code, label: s.name }))
 
-  const tabs: { id: SettingsTab; label: string }[] = [
+  const tabs: { id: SettingsTab; label: string; badge?: number }[] = [
     { id: 'profile', label: 'Profile' },
-    { id: 'documents', label: 'Documents' },
+    { id: 'documents', label: 'Documents', badge: pendingSuggestionsCount > 0 ? pendingSuggestionsCount : undefined },
     { id: 'certifications', label: 'Certifications' },
     { id: 'past-performance', label: 'Past Performance' },
     { id: 'notifications', label: 'Notifications' },
@@ -226,13 +264,18 @@ export default function SettingsPage() {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
+              className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors relative ${
                 activeTab === tab.id
                   ? 'bg-white border border-b-0 border-gray-200 text-blue-600'
                   : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
               }`}
             >
               {tab.label}
+              {tab.badge && (
+                <span className="absolute -top-1 -right-1 bg-blue-600 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                  {tab.badge}
+                </span>
+              )}
             </button>
           ))}
         </div>
@@ -459,11 +502,36 @@ export default function SettingsPage() {
         {/* Documents Tab */}
         {activeTab === 'documents' && (
           <div className="space-y-6">
+            {/* Suggestions Review Panel */}
+            {selectedDocumentForSuggestions && (
+              <DocumentSuggestions
+                documentId={selectedDocumentForSuggestions.id}
+                onApplied={handleSuggestionsApplied}
+                onDismiss={handleSuggestionsDismissed}
+              />
+            )}
+
+            {/* Pending Suggestions Alert */}
+            {pendingSuggestionsCount > 0 && !selectedDocumentForSuggestions && (
+              <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg">
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">✨</span>
+                  <div className="flex-1">
+                    <h4 className="font-medium text-blue-900">Suggestions Available</h4>
+                    <p className="text-sm text-blue-700">
+                      {pendingSuggestionsCount} document{pendingSuggestionsCount > 1 ? 's have' : ' has'} extracted suggestions ready to apply to your profile.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <DocumentUpload
               documentType="capability_statement"
               title="Capability Statement"
               description="Upload your company's capability statement PDF for AI analysis"
               onUploadComplete={reloadDocuments}
+              onExtractionComplete={handleExtractionComplete}
             />
 
             <Card>
@@ -475,6 +543,7 @@ export default function SettingsPage() {
                 <DocumentList
                   documents={documents}
                   onDocumentDeleted={reloadDocuments}
+                  onViewSuggestions={handleViewSuggestions}
                 />
               </CardContent>
             </Card>

@@ -20,6 +20,10 @@ export interface Document {
   is_deleted: boolean;
   created_at: string;
   updated_at: string;
+  // OCR fields
+  ocr_confidence?: number;
+  is_scanned?: boolean;
+  suggestions_reviewed?: boolean;
 }
 
 export interface DocumentVersion {

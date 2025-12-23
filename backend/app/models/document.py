@@ -44,6 +44,13 @@ class Document(Base):
     extracted_entities = Column(JSONB, nullable=True)
     extraction_status = Column(String(20), default="pending", nullable=False)  # pending, processing, completed, failed
 
+    # OCR metadata
+    ocr_confidence = Column(Numeric(5, 2), nullable=True)  # 0-100 confidence score
+    is_scanned = Column(Boolean, default=False, nullable=False)  # True if OCR was needed
+
+    # Suggestion tracking for profile auto-population
+    suggestions_reviewed = Column(Boolean, default=False, nullable=False)  # True after user reviews suggestions
+
     # Soft delete
     is_deleted = Column(Boolean, default=False, nullable=False)
 

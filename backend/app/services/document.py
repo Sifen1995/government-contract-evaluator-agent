@@ -360,6 +360,15 @@ class CertificationService:
             )
         ).first()
 
+    def get_certification_by_type(self, db: Session, company_id: UUID, certification_type: str) -> Optional[CertificationDocument]:
+        """Get a certification by type for a company."""
+        return db.query(CertificationDocument).filter(
+            and_(
+                CertificationDocument.company_id == company_id,
+                CertificationDocument.certification_type == certification_type
+            )
+        ).first()
+
     def list_certifications(
         self,
         db: Session,

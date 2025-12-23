@@ -10,6 +10,7 @@ interface DocumentListProps {
   documents: Document[];
   onDocumentDeleted?: (documentId: string) => void;
   onViewVersions?: (document: Document) => void;
+  onViewSuggestions?: (document: Document) => void;
   showActions?: boolean;
 }
 
@@ -25,6 +26,14 @@ const extractionStatusLabels: Record<string, { label: string; color: string }> =
   processing: { label: 'Processing', color: 'bg-blue-100 text-blue-800' },
   completed: { label: 'Extracted', color: 'bg-green-100 text-green-800' },
   failed: { label: 'Failed', color: 'bg-red-100 text-red-800' },
+}
+
+// OCR quality labels based on confidence score
+const getOcrQualityInfo = (confidence?: number): { label: string; color: string } | null => {
+  if (confidence === undefined || confidence === null) return null
+  if (confidence >= 80) return { label: 'Good', color: 'bg-green-100 text-green-800' }
+  if (confidence >= 50) return { label: 'Fair', color: 'bg-yellow-100 text-yellow-800' }
+  return { label: 'Poor', color: 'bg-red-100 text-red-800' }
 }
 
 function formatFileSize(bytes: number): string {
@@ -45,6 +54,7 @@ export function DocumentList({
   documents,
   onDocumentDeleted,
   onViewVersions,
+  onViewSuggestions,
   showActions = true,
 }: DocumentListProps) {
   const [downloading, setDownloading] = useState<string | null>(null)
@@ -80,6 +90,11 @@ export function DocumentList({
     }
   }
 
+  // Check if document has unreviewed suggestions
+  const hasSuggestions = (doc: Document) => {
+    return doc.extraction_status === 'completed' && doc.suggestions_reviewed === false
+  }
+
   if (documents.length === 0) {
     return (
       <div className="text-center py-8 text-gray-500">
@@ -92,9 +107,12 @@ export function DocumentList({
     <div className="space-y-3">
       {documents.map((doc) => {
         const statusInfo = extractionStatusLabels[doc.extraction_status] || extractionStatusLabels.pending
+        const showSuggestionsBadge = hasSuggestions(doc)
+        const ocrQualityInfo = doc.is_scanned ? getOcrQualityInfo(doc.ocr_confidence) : null
+        const showPoorQualityWarning = doc.is_scanned && doc.ocr_confidence !== undefined && doc.ocr_confidence < 50
 
         return (
-          <Card key={doc.id}>
+          <Card key={doc.id} className={showSuggestionsBadge ? 'ring-2 ring-blue-500 ring-opacity-50' : ''}>
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4 flex-1 min-w-0">
@@ -111,15 +129,42 @@ export function DocumentList({
                       <span>{formatFileSize(doc.file_size)}</span>
                       <span>•</span>
                       <span>Uploaded {formatDate(doc.created_at)}</span>
+                      {doc.is_scanned && (
+                        <>
+                          <span>•</span>
+                          <span className="text-orange-600">Scanned (OCR)</span>
+                        </>
+                      )}
                     </div>
                   </div>
-                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusInfo.color}`}>
-                    {statusInfo.label}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    {showSuggestionsBadge && (
+                      <span className="px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 animate-pulse">
+                        Suggestions Available
+                      </span>
+                    )}
+                    {ocrQualityInfo && (
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${ocrQualityInfo.color}`}>
+                        OCR: {ocrQualityInfo.label}
+                      </span>
+                    )}
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusInfo.color}`}>
+                      {statusInfo.label}
+                    </span>
+                  </div>
                 </div>
 
                 {showActions && (
                   <div className="flex items-center gap-2 ml-4">
+                    {showSuggestionsBadge && onViewSuggestions && (
+                      <Button
+                        size="sm"
+                        onClick={() => onViewSuggestions(doc)}
+                        className="bg-blue-600 hover:bg-blue-700"
+                      >
+                        Review Suggestions
+                      </Button>
+                    )}
                     <Button
                       variant="outline"
                       size="sm"
@@ -149,6 +194,14 @@ export function DocumentList({
                   </div>
                 )}
               </div>
+
+              {/* Poor OCR Quality Warning */}
+              {showPoorQualityWarning && (
+                <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800">
+                  <strong>Low OCR Quality:</strong> This scanned document has poor text recognition quality ({doc.ocr_confidence?.toFixed(0)}% confidence).
+                  Extracted data may be incomplete or inaccurate. Consider re-uploading a clearer scan or a text-based PDF.
+                </div>
+              )}
             </CardContent>
           </Card>
         )

@@ -33,6 +33,12 @@ from app.schemas.document import (
     PastPerformanceUpdate,
     PastPerformanceResponse,
     PastPerformanceListResponse,
+    DocumentSuggestionsResponse,
+    ApplySuggestionsRequest,
+    ApplySuggestionsResponse,
+    SuggestedNAICS,
+    SuggestedCertification,
+    ExtractionStatus,
 )
 from app.schemas.auth import MessageResponse
 import logging
@@ -285,6 +291,204 @@ def restore_document_version(
         )
 
     return restored
+
+
+# ============== Document Suggestions ==============
+
+@router.get("/{document_id}/suggestions", response_model=DocumentSuggestionsResponse)
+def get_document_suggestions(
+    document_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get extracted suggestions from a document for company profile auto-population.
+
+    - Returns NAICS codes, certifications, capabilities extracted from document
+    - Includes OCR quality indicator for scanned documents
+    - Returns empty lists if extraction not completed
+    """
+    company_id = get_user_company_id(current_user, db)
+
+    document = document_service.get_document(db, document_id, company_id)
+    if not document:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found"
+        )
+
+    # Get OCR quality label
+    ocr_quality = None
+    if document.ocr_confidence is not None:
+        from app.services.ocr import get_ocr_quality_label
+        ocr_quality = get_ocr_quality_label(float(document.ocr_confidence))
+
+    # Parse extracted entities into suggestions
+    entities = document.extracted_entities or {}
+
+    # Parse NAICS codes
+    naics_suggestions = []
+    for code in entities.get('naics_codes', []):
+        if isinstance(code, str):
+            naics_suggestions.append(SuggestedNAICS(code=code))
+        elif isinstance(code, dict):
+            naics_suggestions.append(SuggestedNAICS(**code))
+
+    # Parse certifications
+    cert_suggestions = []
+    for cert in entities.get('certifications', []):
+        if isinstance(cert, str):
+            cert_suggestions.append(SuggestedCertification(certification_type=cert))
+        elif isinstance(cert, dict):
+            cert_suggestions.append(SuggestedCertification(**cert))
+
+    # Get capabilities from key_capabilities
+    capabilities_text = None
+    key_capabilities = entities.get('key_capabilities', [])
+    if key_capabilities:
+        capabilities_text = '. '.join(key_capabilities) if isinstance(key_capabilities, list) else str(key_capabilities)
+
+    return DocumentSuggestionsResponse(
+        document_id=document.id,
+        extraction_status=ExtractionStatus(document.extraction_status),
+        ocr_confidence=float(document.ocr_confidence) if document.ocr_confidence else None,
+        ocr_quality=ocr_quality,
+        is_scanned=document.is_scanned,
+        suggestions_reviewed=document.suggestions_reviewed,
+        naics_codes=naics_suggestions,
+        certifications=cert_suggestions,
+        capabilities=capabilities_text,
+        agencies=entities.get('agencies', []),
+        locations=entities.get('locations', []),
+        contract_values=entities.get('contract_values', []),
+        raw_entities=entities
+    )
+
+
+@router.post("/{document_id}/apply-suggestions", response_model=ApplySuggestionsResponse)
+def apply_document_suggestions(
+    document_id: UUID,
+    request: ApplySuggestionsRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Apply selected suggestions from a document to the company profile.
+
+    - Adds selected NAICS codes to company profile
+    - Creates certification records for selected certifications
+    - Updates or appends to company capabilities statement
+    - Updates company profile version (triggers re-scoring)
+    """
+    company_id = get_user_company_id(current_user, db)
+
+    document = document_service.get_document(db, document_id, company_id)
+    if not document:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found"
+        )
+
+    if document.extraction_status != "completed":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Document extraction not completed yet"
+        )
+
+    # Get company
+    company = company_service.get_user_company(db, current_user.id)
+    if not company:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Company not found"
+        )
+
+    naics_added = 0
+    certs_created = 0
+    capabilities_updated = False
+    geo_added = 0
+
+    # Add NAICS codes
+    if request.naics_codes:
+        existing_naics = set(company.naics_codes or [])
+        new_naics = [code for code in request.naics_codes if code not in existing_naics]
+        if new_naics:
+            updated_naics = list(existing_naics) + new_naics
+            company.naics_codes = updated_naics[:10]  # Max 10 codes
+            naics_added = len(new_naics)
+
+    # Create certifications
+    if request.certifications:
+        for cert_type in request.certifications:
+            # Check if certification already exists
+            existing = certification_service.get_certification_by_type(db, company_id, cert_type)
+            if not existing:
+                certification_service.create_certification(
+                    db=db,
+                    company_id=company_id,
+                    certification_type=cert_type,
+                    document_id=document_id
+                )
+                certs_created += 1
+
+    # Update capabilities
+    if request.capabilities:
+        if request.append_capabilities and company.capabilities:
+            company.capabilities = f"{company.capabilities}\n\n{request.capabilities}"
+        else:
+            company.capabilities = request.capabilities
+        capabilities_updated = True
+
+    # Add geographic preferences
+    if request.geographic_preferences:
+        existing_geo = set(company.geographic_preferences or [])
+        new_geo = [state for state in request.geographic_preferences if state not in existing_geo]
+        if new_geo:
+            updated_geo = list(existing_geo) + new_geo
+            company.geographic_preferences = updated_geo
+            geo_added = len(new_geo)
+
+    # Increment profile version if changes were made
+    if naics_added > 0 or certs_created > 0 or capabilities_updated or geo_added > 0:
+        company.profile_version = (company.profile_version or 0) + 1
+
+    # Mark suggestions as reviewed
+    document.suggestions_reviewed = True
+
+    db.commit()
+
+    return ApplySuggestionsResponse(
+        naics_codes_added=naics_added,
+        certifications_created=certs_created,
+        capabilities_updated=capabilities_updated,
+        geographic_preferences_added=geo_added,
+        profile_version=company.profile_version or 1,
+        message=f"Applied suggestions: {naics_added} NAICS codes, {certs_created} certifications, {geo_added} locations"
+    )
+
+
+@router.post("/{document_id}/mark-reviewed", response_model=MessageResponse)
+def mark_suggestions_reviewed(
+    document_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Mark document suggestions as reviewed without applying them.
+    """
+    company_id = get_user_company_id(current_user, db)
+
+    document = document_service.get_document(db, document_id, company_id)
+    if not document:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found"
+        )
+
+    document.suggestions_reviewed = True
+    db.commit()
+
+    return MessageResponse(message="Suggestions marked as reviewed")
 
 
 # ============== Certifications ==============
