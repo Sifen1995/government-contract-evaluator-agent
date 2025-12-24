@@ -88,10 +88,12 @@ python scripts/cleanup_opportunities.py
 
 ### Tech Stack
 - **Backend**: Python 3.9+ + FastAPI + SQLAlchemy + MySQL
-- **Frontend**: Next.js 14 + TypeScript + Tailwind CSS + shadcn/ui
+- **Frontend v1** (`frontend/`): Next.js 14 + TypeScript + Tailwind CSS + shadcn/ui
+- **Frontend v2** (`froentend-new/`): Vite + React 18 + TypeScript + Tailwind CSS + shadcn/ui
 - **AI**: OpenAI GPT-4
 - **Email**: SendGrid (console mode for dev)
 - **Scheduled Tasks**: Cron jobs with standalone Python scripts
+- **Hosting**: AWS S3 + CloudFront (frontend), EC2 (backend)
 
 ### Backend Structure (`backend/`)
 - `app/api/v1/` - API route handlers (auth, company, opportunities, reference)
@@ -102,12 +104,20 @@ python scripts/cleanup_opportunities.py
 - `scripts/` - Standalone cron job scripts (discovery, email tasks, cleanup)
 - `alembic/` - Database migrations
 
-### Frontend Structure (`frontend/`)
+### Frontend v1 Structure (`frontend/`)
 - `app/` - Next.js App Router pages
 - `components/` - React components
 - `hooks/` - Custom React hooks
 - `lib/` - Utilities and API client
 - `types/` - TypeScript type definitions
+
+### Frontend v2 Structure (`froentend-new/`)
+- `src/` - Source code root
+- `src/components/` - React components (shadcn/ui)
+- `src/hooks/` - Custom React hooks
+- `src/lib/` - Utilities and API client
+- `src/types/` - TypeScript type definitions
+- `public/` - Static assets
 
 ### Key Data Flow
 1. Cron job triggers opportunity discovery (every 15 minutes in production)
@@ -142,9 +152,21 @@ Create a `.env` file in the `backend/` directory (copy from `.env.example`):
 
 | Service | URL |
 |---------|-----|
-| Frontend (CloudFront) | https://d246k2epie5kxs.cloudfront.net |
-| Backend API (CloudFront) | https://d1ntjd1d3nmhbf.cloudfront.net |
+| Frontend v1 (Next.js) | https://govcontract-ai.hapotech.com |
+| Frontend v2 (Vite/React) | https://govcontract-ai-2.hapotech.com |
+| Backend API | https://api.govcontract-ai.hapotech.com |
 | Backend API (Direct EC2) | http://ec2-35-173-103-83.compute-1.amazonaws.com:8000 |
+
+### AWS Resources
+
+| Resource | ID/Name |
+|----------|---------|
+| Frontend v1 CloudFront | d246k2epie5kxs.cloudfront.net |
+| Frontend v2 CloudFront | E2ZB5OYHI5GR82 (d1xtbvng3ko6s0.cloudfront.net) |
+| Frontend v2 S3 Bucket | govcontract-ai-2.hapotech.com |
+| Backend API CloudFront | d1ntjd1d3nmhbf.cloudfront.net |
+| Route 53 Hosted Zone | Z0774871S58VKRYXD2JC (hapotech.com) |
+| SSL Certificate (v2) | arn:aws:acm:us-east-1:766669461090:certificate/03cb7439-e85c-4f23-b921-0c89df89f788 |
 
 ### Demo Credentials
 
@@ -156,3 +178,29 @@ Create a `.env` file in the `backend/` directory (copy from `.env.example`):
 ## Production Deployment
 
 See `DEPLOYMENT.md` for production setup on EC2 with systemd services, cron jobs, and Nginx configuration.
+
+### Frontend v2 Deployment (froentend-new)
+
+The new Vite/React frontend is deployed to S3 + CloudFront.
+
+**Environment Configuration:**
+- `.env.production` - Contains `VITE_API_URL=https://api.govcontract-ai.hapotech.com/api/v1`
+
+**Deploy Commands:**
+```bash
+cd froentend-new
+
+# Build for production
+npm run build
+
+# Sync to S3
+aws s3 sync dist s3://govcontract-ai-2.hapotech.com --delete
+
+# Invalidate CloudFront cache
+aws cloudfront create-invalidation --distribution-id E2ZB5OYHI5GR82 --paths "/*"
+```
+
+**Check Deployment Status:**
+```bash
+aws cloudfront get-distribution --id E2ZB5OYHI5GR82 --query 'Distribution.Status' --output text
+```

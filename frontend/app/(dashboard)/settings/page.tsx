@@ -4,25 +4,48 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
 import api from '@/lib/api'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { NativeSelect } from '@/components/ui/select'
-import { Textarea } from '@/components/ui/textarea'
 import { MultiSelect } from '@/components/ui/multi-select'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { DocumentUpload, DocumentList, CertificationForm, PastPerformanceForm, DocumentSuggestions } from '@/components/documents'
 import { BulkRescoreButton } from '@/components/rescoring'
 import { Company } from '@/types/company'
 import { Document, CertificationDocument, PastPerformance } from '@/types/document'
 import { NAICSCode, SetAside, ContractRange, USState } from '@/types/reference'
 import { getDocuments, getCertifications, getPastPerformances } from '@/lib/documents'
+import { motion } from 'framer-motion'
+import {
+  Card,
+  Title,
+  Text,
+  Grid,
+  Badge,
+  Flex,
+  TextInput,
+  Textarea,
+  Select,
+  SelectItem,
+  TabGroup,
+  TabList,
+  Tab,
+} from '@tremor/react'
+import {
+  Building2,
+  FileText,
+  Award,
+  Briefcase,
+  Bell,
+  Sparkles,
+  Save,
+  AlertCircle,
+  CheckCircle,
+  Settings,
+  Zap,
+} from 'lucide-react'
 
 type SettingsTab = 'profile' | 'documents' | 'certifications' | 'past-performance' | 'notifications' | 'ai-settings'
 
 export default function SettingsPage() {
   const router = useRouter()
-  const { user, loading: authLoading, logout } = useAuth()
+  const { user } = useAuth()
 
   const [activeTab, setActiveTab] = useState<SettingsTab>('profile')
   const [loading, setLoading] = useState(true)
@@ -48,11 +71,14 @@ export default function SettingsPage() {
   // Suggestions review state
   const [selectedDocumentForSuggestions, setSelectedDocumentForSuggestions] = useState<Document | null>(null)
 
-  useEffect(() => {
-    if (!authLoading && !user) {
-      router.push('/login')
-    }
-  }, [user, authLoading, router])
+  const tabs: { id: SettingsTab; label: string; icon: typeof Building2; badge?: number }[] = [
+    { id: 'profile', label: 'Profile', icon: Building2 },
+    { id: 'documents', label: 'Documents', icon: FileText },
+    { id: 'certifications', label: 'Certifications', icon: Award },
+    { id: 'past-performance', label: 'Past Performance', icon: Briefcase },
+    { id: 'notifications', label: 'Notifications', icon: Bell },
+    { id: 'ai-settings', label: 'AI Settings', icon: Sparkles },
+  ]
 
   useEffect(() => {
     const loadData = async () => {
@@ -167,9 +193,7 @@ export default function SettingsPage() {
   }
 
   const handleSuggestionsApplied = async () => {
-    // Reload documents to update suggestions_reviewed status
     await reloadDocuments()
-    // Reload company profile to show updated data
     try {
       const companyResponse = await api.get('/company/me')
       setCompany(companyResponse.data)
@@ -186,322 +210,341 @@ export default function SettingsPage() {
   }
 
   const handleExtractionComplete = async (doc: Document) => {
-    // Reload documents to show the new extraction status
     await reloadDocuments()
-    // Auto-select the document for suggestions review
     setSelectedDocumentForSuggestions(doc)
   }
 
-  // Count documents with pending suggestions
   const pendingSuggestionsCount = documents.filter(
     d => d.extraction_status === 'completed' && d.suggestions_reviewed === false
   ).length
 
-  if (authLoading || loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-      </div>
-    )
+  const getTabIndex = (tab: SettingsTab): number => {
+    return tabs.findIndex(t => t.id === tab)
   }
 
-  if (!company) return null
+  const handleTabChange = (index: number) => {
+    setActiveTab(tabs[index].id)
+  }
+
+  if (!user || !company) return null
+
+  if (loading) {
+    return (
+      <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="flex items-center justify-center py-24">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="flex flex-col items-center gap-4"
+          >
+            <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-xl flex items-center justify-center animate-pulse">
+              <Settings className="h-6 w-6 text-white" />
+            </div>
+            <Text className="text-gray-600">Loading settings...</Text>
+          </motion.div>
+        </div>
+      </main>
+    )
+  }
 
   const naicsOptions = naicsCodes.map(n => ({ value: n.code, label: `${n.code} - ${n.title}` }))
   const setAsideOptions = setAsides.map(s => ({ value: s.code, label: s.name }))
   const stateOptions = states.map(s => ({ value: s.code, label: s.name }))
 
-  const tabs: { id: SettingsTab; label: string; badge?: number }[] = [
-    { id: 'profile', label: 'Profile' },
-    { id: 'documents', label: 'Documents', badge: pendingSuggestionsCount > 0 ? pendingSuggestionsCount : undefined },
-    { id: 'certifications', label: 'Certifications' },
-    { id: 'past-performance', label: 'Past Performance' },
-    { id: 'notifications', label: 'Notifications' },
-    { id: 'ai-settings', label: 'AI Settings' },
-  ]
-
   return (
-    <div className="min-h-screen bg-gray-50">
-      <nav className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16">
-            <div className="flex items-center gap-6">
-              <h1 className="text-2xl font-bold text-gray-900">GovAI</h1>
-              <div className="flex gap-4">
-                <Button variant="ghost" onClick={() => router.push('/dashboard')}>
-                  Dashboard
-                </Button>
-                <Button variant="ghost" onClick={() => router.push('/opportunities')}>
-                  Opportunities
-                </Button>
-                <Button variant="ghost" onClick={() => router.push('/pipeline')}>
-                  Pipeline
-                </Button>
-                <Button variant="ghost" className="text-blue-600">
-                  Settings
-                </Button>
-              </div>
+    <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Header */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-8"
+        >
+          <Flex alignItems="center" className="gap-3">
+            <div className="p-3 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl">
+              <Settings className="h-6 w-6 text-white" />
             </div>
-            <div className="flex items-center gap-4">
-              <span className="text-sm text-gray-700">{user?.email}</span>
-              <Button onClick={logout} variant="outline">
-                Logout
-              </Button>
+            <div>
+              <Title className="text-3xl font-bold text-gray-900">Company Settings</Title>
+              <Text className="text-gray-600">Manage your company profile and preferences</Text>
             </div>
-          </div>
-        </div>
-      </nav>
+          </Flex>
+        </motion.div>
 
-      <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-8">
-          <h2 className="text-3xl font-bold text-gray-900 mb-2">Company Settings</h2>
-          <p className="text-gray-600">Manage your company profile and preferences</p>
-        </div>
-
-        {/* Tab Navigation */}
-        <div className="flex gap-1 mb-6 border-b border-gray-200">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors relative ${
-                activeTab === tab.id
-                  ? 'bg-white border border-b-0 border-gray-200 text-blue-600'
-                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-              }`}
-            >
-              {tab.label}
-              {tab.badge && (
-                <span className="absolute -top-1 -right-1 bg-blue-600 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
-                  {tab.badge}
-                </span>
-              )}
-            </button>
-          ))}
-        </div>
-
+        {/* Alerts */}
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-6">
-            {error}
-          </div>
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-6"
+          >
+            <Card className="bg-red-50 border-red-200">
+              <Flex className="gap-3" alignItems="center">
+                <AlertCircle className="h-5 w-5 text-red-600" />
+                <Text className="text-red-700">{error}</Text>
+              </Flex>
+            </Card>
+          </motion.div>
         )}
 
         {success && (
-          <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded mb-6">
-            {success}
-          </div>
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-6"
+          >
+            <Card className="bg-green-50 border-green-200">
+              <Flex className="gap-3" alignItems="center">
+                <CheckCircle className="h-5 w-5 text-green-600" />
+                <Text className="text-green-700">{success}</Text>
+              </Flex>
+            </Card>
+          </motion.div>
         )}
+
+        {/* Tab Navigation */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="mb-6"
+        >
+          <Card>
+            <TabGroup index={getTabIndex(activeTab)} onIndexChange={handleTabChange}>
+              <TabList variant="solid" className="flex-wrap">
+                {tabs.map((tab) => (
+                  <Tab key={tab.id} icon={tab.icon} className="relative">
+                    {tab.label}
+                    {tab.id === 'documents' && pendingSuggestionsCount > 0 && (
+                      <Badge color="blue" size="xs" className="absolute -top-1 -right-1">
+                        {pendingSuggestionsCount}
+                      </Badge>
+                    )}
+                  </Tab>
+                ))}
+              </TabList>
+            </TabGroup>
+          </Card>
+        </motion.div>
 
         {/* Profile Tab */}
         {activeTab === 'profile' && (
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Company Information</CardTitle>
-                <CardDescription>Basic information about your company</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="name">Company Name *</Label>
-                  <Input
-                    id="name"
-                    type="text"
-                    value={company.name}
-                    onChange={(e) => setCompany({ ...company, name: e.target.value })}
-                    required
-                  />
-                </div>
+          <form onSubmit={handleSubmit}>
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+              className="space-y-6"
+            >
+              {/* Company Information */}
+              <Card>
+                <Flex className="gap-2 mb-4" alignItems="center">
+                  <Building2 className="h-5 w-5 text-blue-600" />
+                  <Title>Company Information</Title>
+                </Flex>
+                <Text className="text-gray-500 mb-6">Basic information about your company</Text>
 
-                <div className="space-y-2">
-                  <Label htmlFor="legal_structure">Legal Structure</Label>
-                  <NativeSelect
-                    id="legal_structure"
-                    value={company.legal_structure || ''}
-                    onChange={(e) => setCompany({ ...company, legal_structure: e.target.value })}
-                  >
-                    <option value="">Select structure...</option>
-                    {legalStructures.map((structure) => (
-                      <option key={structure} value={structure}>
-                        {structure}
-                      </option>
-                    ))}
-                  </NativeSelect>
-                </div>
+                <Grid numItemsMd={2} className="gap-6">
+                  <div className="md:col-span-2">
+                    <Text className="text-sm font-medium text-gray-700 mb-2">Company Name *</Text>
+                    <TextInput
+                      value={company.name}
+                      onChange={(e) => setCompany({ ...company, name: e.target.value })}
+                      placeholder="Your company name"
+                    />
+                  </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="uei">UEI (Unique Entity Identifier)</Label>
-                  <Input
-                    id="uei"
-                    type="text"
-                    placeholder="12-character SAM.gov UEI"
-                    maxLength={12}
-                    value={company.uei || ''}
-                    onChange={(e) => setCompany({ ...company, uei: e.target.value })}
-                  />
-                </div>
+                  <div>
+                    <Text className="text-sm font-medium text-gray-700 mb-2">Legal Structure</Text>
+                    <Select
+                      value={company.legal_structure || ''}
+                      onValueChange={(v) => setCompany({ ...company, legal_structure: v })}
+                    >
+                      <SelectItem value="">Select structure...</SelectItem>
+                      {legalStructures.map((structure) => (
+                        <SelectItem key={structure} value={structure}>
+                          {structure}
+                        </SelectItem>
+                      ))}
+                    </Select>
+                  </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="address_street">Street Address</Label>
-                    <Input
-                      id="address_street"
-                      type="text"
+                  <div>
+                    <Text className="text-sm font-medium text-gray-700 mb-2">UEI (Unique Entity Identifier)</Text>
+                    <TextInput
+                      value={company.uei || ''}
+                      onChange={(e) => setCompany({ ...company, uei: e.target.value })}
+                      placeholder="12-character SAM.gov UEI"
+                      maxLength={12}
+                    />
+                  </div>
+
+                  <div>
+                    <Text className="text-sm font-medium text-gray-700 mb-2">Street Address</Text>
+                    <TextInput
                       value={company.address_street || ''}
                       onChange={(e) => setCompany({ ...company, address_street: e.target.value })}
+                      placeholder="Street address"
                     />
                   </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="address_city">City</Label>
-                    <Input
-                      id="address_city"
-                      type="text"
+                  <div>
+                    <Text className="text-sm font-medium text-gray-700 mb-2">City</Text>
+                    <TextInput
                       value={company.address_city || ''}
                       onChange={(e) => setCompany({ ...company, address_city: e.target.value })}
+                      placeholder="City"
                     />
                   </div>
-                </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="address_state">State</Label>
-                    <NativeSelect
-                      id="address_state"
+                  <div>
+                    <Text className="text-sm font-medium text-gray-700 mb-2">State</Text>
+                    <Select
                       value={company.address_state || ''}
-                      onChange={(e) => setCompany({ ...company, address_state: e.target.value })}
+                      onValueChange={(v) => setCompany({ ...company, address_state: v })}
                     >
-                      <option value="">Select state...</option>
+                      <SelectItem value="">Select state...</SelectItem>
                       {states.map((state) => (
-                        <option key={state.code} value={state.code}>
+                        <SelectItem key={state.code} value={state.code}>
                           {state.name}
-                        </option>
+                        </SelectItem>
                       ))}
-                    </NativeSelect>
+                    </Select>
                   </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="address_zip">ZIP Code</Label>
-                    <Input
-                      id="address_zip"
-                      type="text"
+                  <div>
+                    <Text className="text-sm font-medium text-gray-700 mb-2">ZIP Code</Text>
+                    <TextInput
                       value={company.address_zip || ''}
                       onChange={(e) => setCompany({ ...company, address_zip: e.target.value })}
+                      placeholder="ZIP Code"
+                    />
+                  </div>
+                </Grid>
+              </Card>
+
+              {/* NAICS & Certifications */}
+              <Card>
+                <Flex className="gap-2 mb-4" alignItems="center">
+                  <Award className="h-5 w-5 text-violet-600" />
+                  <Title>NAICS Codes & Certifications</Title>
+                </Flex>
+                <Text className="text-gray-500 mb-6">Your business classifications and certifications</Text>
+
+                <div className="space-y-6">
+                  <div>
+                    <Text className="text-sm font-medium text-gray-700 mb-2">NAICS Codes (Up to 10)</Text>
+                    <MultiSelect
+                      options={naicsOptions}
+                      selected={company.naics_codes}
+                      onChange={(values) => setCompany({ ...company, naics_codes: values })}
+                      placeholder="Search and select NAICS codes..."
+                      maxItems={10}
+                    />
+                    <Text className="text-xs text-gray-500 mt-1">
+                      Selected: {company.naics_codes.length}/10
+                    </Text>
+                  </div>
+
+                  <div>
+                    <Text className="text-sm font-medium text-gray-700 mb-2">Set-Aside Certifications</Text>
+                    <MultiSelect
+                      options={setAsideOptions}
+                      selected={company.set_asides}
+                      onChange={(values) => setCompany({ ...company, set_asides: values })}
+                      placeholder="Select your certifications..."
+                    />
+                  </div>
+
+                  <div>
+                    <Text className="text-sm font-medium text-gray-700 mb-2">Typical Contract Value Range</Text>
+                    <Select
+                      value={contractRanges.findIndex(r =>
+                        r.min === company.contract_value_min && r.max === company.contract_value_max
+                      ).toString()}
+                      onValueChange={(v) => {
+                        const range = contractRanges[parseInt(v)]
+                        if (range) {
+                          setCompany({
+                            ...company,
+                            contract_value_min: range.min,
+                            contract_value_max: range.max
+                          })
+                        }
+                      }}
+                    >
+                      <SelectItem value="-1">Select range...</SelectItem>
+                      {contractRanges.map((range, index) => (
+                        <SelectItem key={range.label} value={index.toString()}>
+                          {range.label}
+                        </SelectItem>
+                      ))}
+                    </Select>
+                  </div>
+
+                  <div>
+                    <Text className="text-sm font-medium text-gray-700 mb-2">Geographic Preferences</Text>
+                    <MultiSelect
+                      options={[
+                        { value: 'Nationwide', label: 'Nationwide' },
+                        ...stateOptions
+                      ]}
+                      selected={company.geographic_preferences}
+                      onChange={(values) => setCompany({ ...company, geographic_preferences: values })}
+                      placeholder="Select states or Nationwide..."
                     />
                   </div>
                 </div>
-              </CardContent>
-            </Card>
+              </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>NAICS Codes & Certifications</CardTitle>
-                <CardDescription>Your business classifications and certifications</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label>NAICS Codes (Up to 10)</Label>
-                  <MultiSelect
-                    options={naicsOptions}
-                    selected={company.naics_codes}
-                    onChange={(values) => setCompany({ ...company, naics_codes: values })}
-                    placeholder="Search and select NAICS codes..."
-                    maxItems={10}
-                  />
-                  <p className="text-xs text-gray-500">
-                    Selected: {company.naics_codes.length}/10
-                  </p>
-                </div>
+              {/* Capabilities Statement */}
+              <Card>
+                <Flex className="gap-2 mb-4" alignItems="center">
+                  <FileText className="h-5 w-5 text-emerald-600" />
+                  <Title>Capabilities Statement</Title>
+                </Flex>
+                <Text className="text-gray-500 mb-6">Your company's core competencies and strengths</Text>
 
-                <div className="space-y-2">
-                  <Label>Set-Aside Certifications</Label>
-                  <MultiSelect
-                    options={setAsideOptions}
-                    selected={company.set_asides}
-                    onChange={(values) => setCompany({ ...company, set_asides: values })}
-                    placeholder="Select your certifications..."
-                  />
-                </div>
+                <Textarea
+                  rows={12}
+                  value={company.capabilities || ''}
+                  onChange={(e) => setCompany({ ...company, capabilities: e.target.value })}
+                  placeholder="Describe your company's core competencies, key differentiators, and relevant experience..."
+                />
+                <Text className="text-xs text-gray-500 mt-2">
+                  {company.capabilities?.split(/\s+/).filter(Boolean).length || 0}/500 words
+                </Text>
+              </Card>
 
-                <div className="space-y-2">
-                  <Label htmlFor="contract_range">Typical Contract Value Range</Label>
-                  <NativeSelect
-                    id="contract_range"
-                    value={contractRanges.findIndex(r =>
-                      r.min === company.contract_value_min && r.max === company.contract_value_max
-                    ).toString()}
-                    onChange={(e) => {
-                      const range = contractRanges[parseInt(e.target.value)]
-                      if (range) {
-                        setCompany({
-                          ...company,
-                          contract_value_min: range.min,
-                          contract_value_max: range.max
-                        })
-                      }
-                    }}
-                  >
-                    <option value="-1">Select range...</option>
-                    {contractRanges.map((range, index) => (
-                      <option key={range.label} value={index}>
-                        {range.label}
-                      </option>
-                    ))}
-                  </NativeSelect>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Geographic Preferences</Label>
-                  <MultiSelect
-                    options={[
-                      { value: 'Nationwide', label: 'Nationwide' },
-                      ...stateOptions
-                    ]}
-                    selected={company.geographic_preferences}
-                    onChange={(values) => setCompany({ ...company, geographic_preferences: values })}
-                    placeholder="Select states or Nationwide..."
-                  />
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Capabilities Statement</CardTitle>
-                <CardDescription>Your company's core competencies and strengths</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  <Textarea
-                    rows={12}
-                    value={company.capabilities || ''}
-                    onChange={(e) => setCompany({ ...company, capabilities: e.target.value })}
-                    placeholder="Describe your company's core competencies..."
-                  />
-                  <p className="text-xs text-gray-500">
-                    {company.capabilities?.split(/\s+/).filter(Boolean).length || 0}/500 words
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-
-            <div className="flex justify-end gap-4">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => router.push('/dashboard')}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" disabled={saving}>
-                {saving ? 'Saving...' : 'Save Changes'}
-              </Button>
-            </div>
+              {/* Submit Buttons */}
+              <Flex justifyContent="end" className="gap-4">
+                <button
+                  type="button"
+                  onClick={() => router.push('/dashboard')}
+                  className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                >
+                  <Save className="h-4 w-4" />
+                  {saving ? 'Saving...' : 'Save Changes'}
+                </button>
+              </Flex>
+            </motion.div>
           </form>
         )}
 
         {/* Documents Tab */}
         {activeTab === 'documents' && (
-          <div className="space-y-6">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="space-y-6"
+          >
             {/* Suggestions Review Panel */}
             {selectedDocumentForSuggestions && (
               <DocumentSuggestions
@@ -513,17 +556,19 @@ export default function SettingsPage() {
 
             {/* Pending Suggestions Alert */}
             {pendingSuggestionsCount > 0 && !selectedDocumentForSuggestions && (
-              <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg">
-                <div className="flex items-center gap-3">
-                  <span className="text-2xl">✨</span>
-                  <div className="flex-1">
-                    <h4 className="font-medium text-blue-900">Suggestions Available</h4>
-                    <p className="text-sm text-blue-700">
-                      {pendingSuggestionsCount} document{pendingSuggestionsCount > 1 ? 's have' : ' has'} extracted suggestions ready to apply to your profile.
-                    </p>
+              <Card className="bg-blue-50 border-blue-200">
+                <Flex className="gap-3" alignItems="center">
+                  <div className="p-2 bg-blue-100 rounded-lg">
+                    <Sparkles className="h-5 w-5 text-blue-600" />
                   </div>
-                </div>
-              </div>
+                  <div className="flex-1">
+                    <Text className="font-medium text-blue-900">Suggestions Available</Text>
+                    <Text className="text-sm text-blue-700">
+                      {pendingSuggestionsCount} document{pendingSuggestionsCount > 1 ? 's have' : ' has'} extracted suggestions ready to apply to your profile.
+                    </Text>
+                  </div>
+                </Flex>
+              </Card>
             )}
 
             <DocumentUpload
@@ -535,160 +580,159 @@ export default function SettingsPage() {
             />
 
             <Card>
-              <CardHeader>
-                <CardTitle>Uploaded Documents</CardTitle>
-                <CardDescription>Manage your uploaded documents</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <DocumentList
-                  documents={documents}
-                  onDocumentDeleted={reloadDocuments}
-                  onViewSuggestions={handleViewSuggestions}
-                />
-              </CardContent>
+              <Flex className="gap-2 mb-4" alignItems="center">
+                <FileText className="h-5 w-5 text-blue-600" />
+                <Title>Uploaded Documents</Title>
+              </Flex>
+              <Text className="text-gray-500 mb-6">Manage your uploaded documents</Text>
+
+              <DocumentList
+                documents={documents}
+                onDocumentDeleted={reloadDocuments}
+                onViewSuggestions={handleViewSuggestions}
+              />
             </Card>
-          </div>
+          </motion.div>
         )}
 
         {/* Certifications Tab */}
         {activeTab === 'certifications' && (
-          <div className="space-y-6">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+          >
             <CertificationForm
               certifications={certifications}
               onCertificationChange={reloadCertifications}
             />
-          </div>
+          </motion.div>
         )}
 
         {/* Past Performance Tab */}
         {activeTab === 'past-performance' && (
-          <div className="space-y-6">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+          >
             <PastPerformanceForm
               records={pastPerformances}
               onRecordChange={reloadPastPerformances}
             />
-          </div>
+          </motion.div>
         )}
 
         {/* Notifications Tab */}
         {activeTab === 'notifications' && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Notification Preferences</CardTitle>
-              <CardDescription>
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+          >
+            <Card>
+              <Flex className="gap-2 mb-4" alignItems="center">
+                <Bell className="h-5 w-5 text-amber-600" />
+                <Title>Notification Preferences</Title>
+              </Flex>
+              <Text className="text-gray-500 mb-6">
                 Choose how often you want to receive email notifications about new opportunities
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
+              </Text>
+
               <div className="space-y-3">
-                <label className="flex items-start gap-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
-                  <input
-                    type="radio"
-                    name="emailFrequency"
-                    value="realtime"
-                    checked={emailFrequency === 'realtime'}
-                    onChange={(e) => setEmailFrequency(e.target.value)}
-                    className="mt-1"
-                  />
-                  <div>
-                    <div className="font-medium">Real-time</div>
-                    <div className="text-sm text-gray-600">
-                      Get notified immediately when new BID recommendations are found
+                {[
+                  { value: 'realtime', title: 'Real-time', description: 'Get notified immediately when new BID recommendations are found' },
+                  { value: 'daily', title: 'Daily Digest', description: 'Receive a daily summary of new opportunities and upcoming deadlines at 8 AM', recommended: true },
+                  { value: 'weekly', title: 'Weekly Summary', description: 'Get a weekly roundup of opportunities every Monday morning' },
+                  { value: 'none', title: 'No Emails', description: 'Turn off all email notifications (you can still view opportunities in the app)' },
+                ].map((option) => (
+                  <label
+                    key={option.value}
+                    className={`flex items-start gap-4 p-4 border rounded-xl cursor-pointer transition-all ${
+                      emailFrequency === option.value
+                        ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200'
+                        : 'border-gray-200 hover:bg-gray-50'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="emailFrequency"
+                      value={option.value}
+                      checked={emailFrequency === option.value}
+                      onChange={(e) => setEmailFrequency(e.target.value)}
+                      className="mt-1"
+                    />
+                    <div className="flex-1">
+                      <Flex alignItems="center" className="gap-2">
+                        <Text className="font-medium">{option.title}</Text>
+                        {option.recommended && (
+                          <Badge color="blue" size="xs">Recommended</Badge>
+                        )}
+                      </Flex>
+                      <Text className="text-sm text-gray-600 mt-1">
+                        {option.description}
+                      </Text>
                     </div>
-                  </div>
-                </label>
-
-                <label className="flex items-start gap-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
-                  <input
-                    type="radio"
-                    name="emailFrequency"
-                    value="daily"
-                    checked={emailFrequency === 'daily'}
-                    onChange={(e) => setEmailFrequency(e.target.value)}
-                    className="mt-1"
-                  />
-                  <div>
-                    <div className="font-medium">Daily Digest (Recommended)</div>
-                    <div className="text-sm text-gray-600">
-                      Receive a daily summary of new opportunities and upcoming deadlines at 8 AM
-                    </div>
-                  </div>
-                </label>
-
-                <label className="flex items-start gap-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
-                  <input
-                    type="radio"
-                    name="emailFrequency"
-                    value="weekly"
-                    checked={emailFrequency === 'weekly'}
-                    onChange={(e) => setEmailFrequency(e.target.value)}
-                    className="mt-1"
-                  />
-                  <div>
-                    <div className="font-medium">Weekly Summary</div>
-                    <div className="text-sm text-gray-600">
-                      Get a weekly roundup of opportunities every Monday morning
-                    </div>
-                  </div>
-                </label>
-
-                <label className="flex items-start gap-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
-                  <input
-                    type="radio"
-                    name="emailFrequency"
-                    value="none"
-                    checked={emailFrequency === 'none'}
-                    onChange={(e) => setEmailFrequency(e.target.value)}
-                    className="mt-1"
-                  />
-                  <div>
-                    <div className="font-medium">No Emails</div>
-                    <div className="text-sm text-gray-600">
-                      Turn off all email notifications (you can still view opportunities in the app)
-                    </div>
-                  </div>
-                </label>
+                  </label>
+                ))}
               </div>
 
-              <div className="pt-4">
-                <Button
+              <div className="mt-6 pt-6 border-t">
+                <button
                   onClick={handleEmailPreferencesSubmit}
                   disabled={savingEmail}
+                  className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
                 >
+                  <Save className="h-4 w-4" />
                   {savingEmail ? 'Saving...' : 'Save Email Preferences'}
-                </Button>
+                </button>
               </div>
-            </CardContent>
-          </Card>
+            </Card>
+          </motion.div>
         )}
 
         {/* AI Settings Tab */}
         {activeTab === 'ai-settings' && (
-          <div className="space-y-6">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="space-y-6"
+          >
             <BulkRescoreButton />
 
             <Card>
-              <CardHeader>
-                <CardTitle>AI Evaluation Settings</CardTitle>
-                <CardDescription>Configure how AI evaluates opportunities for your company</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-gray-600">
-                  AI evaluations are automatically updated when you change your company profile.
-                  The AI considers your NAICS codes, certifications, capabilities, and past performance
-                  when scoring opportunities.
-                </p>
-                <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                  <p className="text-sm text-blue-800">
-                    <strong>Tip:</strong> Keep your profile up to date for the most accurate AI recommendations.
-                    Upload your capability statement and past performance documents to improve scoring accuracy.
-                  </p>
-                </div>
-              </CardContent>
+              <Flex className="gap-2 mb-4" alignItems="center">
+                <Zap className="h-5 w-5 text-violet-600" />
+                <Title>AI Evaluation Settings</Title>
+              </Flex>
+              <Text className="text-gray-500 mb-6">
+                Configure how AI evaluates opportunities for your company
+              </Text>
+
+              <Text className="text-gray-700">
+                AI evaluations are automatically updated when you change your company profile.
+                The AI considers your NAICS codes, certifications, capabilities, and past performance
+                when scoring opportunities.
+              </Text>
+
+              <Card className="mt-6 bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200">
+                <Flex className="gap-3" alignItems="start">
+                  <div className="p-2 bg-blue-100 rounded-lg">
+                    <Sparkles className="h-5 w-5 text-blue-600" />
+                  </div>
+                  <div>
+                    <Text className="font-medium text-blue-900">Pro Tip</Text>
+                    <Text className="text-sm text-blue-700 mt-1">
+                      Keep your profile up to date for the most accurate AI recommendations.
+                      Upload your capability statement and past performance documents to improve scoring accuracy.
+                    </Text>
+                  </div>
+                </Flex>
+              </Card>
             </Card>
-          </div>
+          </motion.div>
         )}
-      </main>
-    </div>
+    </main>
   )
 }

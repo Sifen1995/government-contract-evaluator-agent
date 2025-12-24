@@ -1,0 +1,73 @@
+{
+  "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+
+  "source": "sam.gov",
+  "source_id": "78c6e9d2b4a1489ab3f9812345abcdef",
+  "source_type": "opportunity",
+
+  "issuing_agency": "Department of Defense",
+  "issuing_sub_agency": "Department of the Navy",
+  "issuing_office": "NAVAIR",
+
+  "is_forecast": false,
+  "forecast_fiscal_year": null,
+  "forecast_quarter": null,
+  "forecast_estimated_release": null,
+
+  "title": "IT Infrastructure Modernization Support Services",
+  "description": "The contractor shall provide comprehensive IT infrastructure modernization services including cloud migration, cybersecurity implementation, and legacy system integration for Naval Air Systems Command facilities.",
+  "notice_type": "Solicitation",
+
+  "naics_code": "541512",
+  "psc_code": "D302",
+  "set_aside_type": "Small Business",
+
+  "pop_city": "Arlington",
+  "pop_state": "VA",
+  "pop_zip": "22202",
+
+  "posted_date": "2025-01-15T14:30:00Z",
+  "response_deadline": "2025-02-15T17:00:00Z",
+  "closed_at": null,
+  "last_seen_at": "2025-01-20T08:00:00Z",
+
+  "estimated_value_low": 500000.00,
+  "estimated_value_high": 2500000.00,
+  "estimated_value_text": "$500K - $2.5M",
+
+  "contact_name": "John Smith",
+  "contact_email": "john.smith@navy.mil",
+  "contact_phone": "703-555-1234",
+
+  "source_url": "https://sam.gov/opp/78c6e9d2b4a1489ab3f9812345abcdef/view",
+  "attachments": [
+    {
+      "name": "SOW.pdf",
+      "url": "https://sam.gov/api/prod/opps/v3/opportunities/78c6e9d2/resources/attachments/SOW.pdf",
+      "type": "application/pdf"
+    },
+    {
+      "name": "RFP_Instructions.docx",
+      "url": "https://sam.gov/api/prod/opps/v3/opportunities/78c6e9d2/resources/attachments/RFP.docx",
+      "type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    }
+  ],
+
+  "status": "active",
+  "evaluation_status": "evaluated",
+  "generic_evaluation": {
+    "complexity": "medium",
+    "competition_level": "moderate",
+    "keywords": ["cloud", "cybersecurity", "modernization"]
+  },
+
+  "ingestion_run_id": "f9e8d7c6-b5a4-3210-9876-fedcba987654",
+  "raw_source": "sam_api_v3",
+  "raw_data": {
+    "noticeId": "78c6e9d2b4a1489ab3f9812345abcdef",
+    "classificationCode": "Information Technology Services"
+  },
+
+  "created_at": "2025-01-15T15:00:00Z",
+  "updated_at": "2025-01-20T08:00:00Z"
+}

@@ -5,48 +5,90 @@ import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
 import { getEvaluations, updateEvaluation } from '@/lib/opportunities'
 import { EvaluationWithOpportunity } from '@/types/opportunity'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
+import { motion, AnimatePresence } from 'framer-motion'
+import {
+  Card,
+  Title,
+  Text,
+  Grid,
+  Badge,
+  Flex,
+  Metric,
+  ProgressBar,
+  Button,
+} from '@tremor/react'
+import {
+  Eye,
+  FileEdit,
+  Trophy,
+  XCircle,
+  Trash2,
+  Clock,
+  DollarSign,
+  Building2,
+  ArrowRight,
+  Sparkles,
+} from 'lucide-react'
 
 type PipelineStatus = 'WATCHING' | 'BIDDING' | 'WON' | 'LOST'
 
 interface PipelineColumn {
   status: PipelineStatus
   title: string
-  color: string
-  bgColor: string
-  icon: string
+  icon: typeof Eye
+  color: 'blue' | 'violet' | 'emerald' | 'slate'
+  bgClass: string
+  borderClass: string
 }
 
 const PIPELINE_COLUMNS: PipelineColumn[] = [
-  { status: 'WATCHING', title: 'Watching', color: 'text-blue-600', bgColor: 'bg-blue-50 border-blue-200', icon: '👀' },
-  { status: 'BIDDING', title: 'Bidding', color: 'text-purple-600', bgColor: 'bg-purple-50 border-purple-200', icon: '📝' },
-  { status: 'WON', title: 'Won', color: 'text-green-600', bgColor: 'bg-green-50 border-green-200', icon: '🎉' },
-  { status: 'LOST', title: 'Lost', color: 'text-gray-600', bgColor: 'bg-gray-50 border-gray-200', icon: '❌' },
+  {
+    status: 'WATCHING',
+    title: 'Watching',
+    icon: Eye,
+    color: 'blue',
+    bgClass: 'bg-blue-50',
+    borderClass: 'border-blue-200',
+  },
+  {
+    status: 'BIDDING',
+    title: 'Bidding',
+    icon: FileEdit,
+    color: 'violet',
+    bgClass: 'bg-violet-50',
+    borderClass: 'border-violet-200',
+  },
+  {
+    status: 'WON',
+    title: 'Won',
+    icon: Trophy,
+    color: 'emerald',
+    bgClass: 'bg-emerald-50',
+    borderClass: 'border-emerald-200',
+  },
+  {
+    status: 'LOST',
+    title: 'Lost',
+    icon: XCircle,
+    color: 'slate',
+    bgClass: 'bg-slate-50',
+    borderClass: 'border-slate-200',
+  },
 ]
 
 export default function PipelinePage() {
-  const { user, loading: authLoading, logout } = useAuth()
+  const { user } = useAuth()
   const router = useRouter()
   const [evaluations, setEvaluations] = useState<EvaluationWithOpportunity[]>([])
   const [loading, setLoading] = useState(true)
   const [updating, setUpdating] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!authLoading && !user) {
-      router.push('/login')
-    }
-  }, [user, authLoading, router])
-
-  useEffect(() => {
     const loadPipeline = async () => {
       if (!user) return
 
       try {
-        // Load all evaluations that have been saved to pipeline
         const data = await getEvaluations({ limit: 100 })
-        // Filter to only show those in pipeline
         const pipelineItems = data.evaluations.filter(e => e.user_saved)
         setEvaluations(pipelineItems)
       } catch (error) {
@@ -65,8 +107,6 @@ export default function PipelinePage() {
     try {
       setUpdating(evaluationId)
       await updateEvaluation(evaluationId, { user_saved: newStatus })
-
-      // Update local state
       setEvaluations(prev =>
         prev.map(e =>
           e.id === evaluationId ? { ...e, user_saved: newStatus } : e
@@ -74,24 +114,18 @@ export default function PipelinePage() {
       )
     } catch (error) {
       console.error('Error updating status:', error)
-      alert('Failed to update status')
     } finally {
       setUpdating(null)
     }
   }
 
   const handleRemoveFromPipeline = async (evaluationId: string) => {
-    if (!confirm('Remove this opportunity from your pipeline?')) return
-
     try {
       setUpdating(evaluationId)
       await updateEvaluation(evaluationId, { user_saved: null })
-
-      // Remove from local state
       setEvaluations(prev => prev.filter(e => e.id !== evaluationId))
     } catch (error) {
       console.error('Error removing from pipeline:', error)
-      alert('Failed to remove from pipeline')
     } finally {
       setUpdating(null)
     }
@@ -103,299 +137,284 @@ export default function PipelinePage() {
 
   const formatDate = (date: string | undefined) => {
     if (!date) return 'N/A'
-    return new Date(date).toLocaleDateString()
+    return new Date(date).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+    })
   }
 
   const formatCurrency = (value: number | undefined) => {
-    if (!value) return 'N/A'
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(value)
+    if (!value) return 'TBD'
+    if (value >= 1000000) return `$${(value / 1000000).toFixed(1)}M`
+    if (value >= 1000) return `$${(value / 1000).toFixed(0)}K`
+    return `$${value}`
   }
 
-  const isDeadlineSoon = (deadline: string | undefined) => {
-    if (!deadline) return false
-    const deadlineDate = new Date(deadline)
-    const today = new Date()
-    const daysUntil = Math.ceil((deadlineDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
-    return daysUntil <= 7 && daysUntil >= 0
-  }
-
-  const isDeadlinePassed = (deadline: string | undefined) => {
-    if (!deadline) return false
-    return new Date(deadline) < new Date()
-  }
-
-  if (authLoading || loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-      </div>
-    )
+  const getDaysUntilDeadline = (deadline: string | undefined) => {
+    if (!deadline) return null
+    const days = Math.ceil((new Date(deadline).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+    return days
   }
 
   if (!user) return null
 
-  // Stats
+  if (loading) {
+    return (
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="flex items-center justify-center py-24">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="flex flex-col items-center gap-4"
+          >
+            <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-xl flex items-center justify-center animate-pulse">
+              <Sparkles className="h-6 w-6 text-white" />
+            </div>
+            <Text className="text-gray-600">Loading your pipeline...</Text>
+          </motion.div>
+        </div>
+      </main>
+    )
+  }
+
   const totalInPipeline = evaluations.length
-  const totalWatching = getEvaluationsByStatus('WATCHING').length
-  const totalBidding = getEvaluationsByStatus('BIDDING').length
-  const totalWon = getEvaluationsByStatus('WON').length
-  const totalLost = getEvaluationsByStatus('LOST').length
+  const stats = {
+    watching: getEvaluationsByStatus('WATCHING').length,
+    bidding: getEvaluationsByStatus('BIDDING').length,
+    won: getEvaluationsByStatus('WON').length,
+    lost: getEvaluationsByStatus('LOST').length,
+  }
+  const winRate = stats.won + stats.lost > 0
+    ? ((stats.won / (stats.won + stats.lost)) * 100).toFixed(0)
+    : null
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <nav className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16">
-            <div className="flex items-center gap-6">
-              <h1 className="text-2xl font-bold text-gray-900">GovAI</h1>
-              <div className="flex gap-4">
-                <Button variant="ghost" onClick={() => router.push('/dashboard')}>
-                  Dashboard
-                </Button>
-                <Button variant="ghost" onClick={() => router.push('/opportunities')}>
-                  Opportunities
-                </Button>
-                <Button variant="ghost" className="text-blue-600">
-                  Pipeline
-                </Button>
-                <Button variant="ghost" onClick={() => router.push('/settings')}>
-                  Settings
-                </Button>
-              </div>
+    <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Header */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-8"
+        >
+          <Flex justifyContent="between" alignItems="end">
+            <div>
+              <Title className="text-3xl font-bold text-gray-900">
+                Pipeline Management
+              </Title>
+              <Text className="mt-1 text-gray-600">
+                Track your opportunities through the bidding process
+              </Text>
             </div>
-            <div className="flex items-center gap-4">
-              <span className="text-sm text-gray-700">{user.email}</span>
-              <Button onClick={logout} variant="outline">
-                Logout
-              </Button>
-            </div>
-          </div>
-        </div>
-      </nav>
-
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-8">
-          <h2 className="text-3xl font-bold text-gray-900 mb-2">Pipeline Management</h2>
-          <p className="text-gray-600">Track your opportunities through the bidding process</p>
-        </div>
+            {winRate && (
+              <Card className="px-4 py-2" decoration="left" decorationColor="emerald">
+                <Flex className="gap-2" alignItems="center">
+                  <Trophy className="h-5 w-5 text-emerald-600" />
+                  <div>
+                    <Text className="text-xs">Win Rate</Text>
+                    <Text className="font-bold text-emerald-600">{winRate}%</Text>
+                  </div>
+                </Flex>
+              </Card>
+            )}
+          </Flex>
+        </motion.div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-5 gap-4 mb-8">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-2xl font-bold text-gray-900">{totalInPipeline}</CardTitle>
-              <CardDescription>Total in Pipeline</CardDescription>
-            </CardHeader>
-          </Card>
-          <Card className="border-blue-200 bg-blue-50">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-2xl font-bold text-blue-600">{totalWatching}</CardTitle>
-              <CardDescription>Watching</CardDescription>
-            </CardHeader>
-          </Card>
-          <Card className="border-purple-200 bg-purple-50">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-2xl font-bold text-purple-600">{totalBidding}</CardTitle>
-              <CardDescription>Bidding</CardDescription>
-            </CardHeader>
-          </Card>
-          <Card className="border-green-200 bg-green-50">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-2xl font-bold text-green-600">{totalWon}</CardTitle>
-              <CardDescription>Won</CardDescription>
-            </CardHeader>
-          </Card>
-          <Card className="border-gray-200 bg-gray-50">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-2xl font-bold text-gray-600">{totalLost}</CardTitle>
-              <CardDescription>Lost</CardDescription>
-            </CardHeader>
-          </Card>
-        </div>
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="mb-8"
+        >
+          <Grid numItemsSm={2} numItemsLg={5} className="gap-4">
+            <Card decoration="top" decorationColor="gray">
+              <Text>Total in Pipeline</Text>
+              <Metric>{totalInPipeline}</Metric>
+            </Card>
+            {PIPELINE_COLUMNS.map((col) => (
+              <Card key={col.status} decoration="top" decorationColor={col.color}>
+                <Flex alignItems="start">
+                  <div>
+                    <Text>{col.title}</Text>
+                    <Metric className={`text-${col.color}-600`}>
+                      {getEvaluationsByStatus(col.status).length}
+                    </Metric>
+                  </div>
+                  <col.icon className={`h-6 w-6 text-${col.color}-500`} />
+                </Flex>
+              </Card>
+            ))}
+          </Grid>
+        </motion.div>
 
         {totalInPipeline === 0 ? (
-          <Card className="text-center py-12">
-            <CardContent>
-              <div className="text-6xl mb-4">📋</div>
-              <h3 className="text-xl font-semibold mb-2">Your pipeline is empty</h3>
-              <p className="text-gray-600 mb-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: 0.2 }}
+          >
+            <Card className="text-center py-16">
+              <div className="text-6xl mb-6">📋</div>
+              <Title>Your pipeline is empty</Title>
+              <Text className="text-gray-500 mt-2 mb-6">
                 Start by browsing opportunities and saving them to your pipeline
-              </p>
-              <Button onClick={() => router.push('/opportunities')}>
+              </Text>
+              <Button
+                size="lg"
+                icon={ArrowRight}
+                iconPosition="right"
+                onClick={() => router.push('/opportunities')}
+              >
                 Browse Opportunities
               </Button>
-            </CardContent>
-          </Card>
+            </Card>
+          </motion.div>
         ) : (
-          /* Kanban Board */
-          <div className="grid grid-cols-4 gap-4">
-            {PIPELINE_COLUMNS.map((column) => (
-              <div key={column.status} className={`rounded-lg border-2 ${column.bgColor} p-4`}>
-                <div className="flex items-center gap-2 mb-4">
-                  <span className="text-xl">{column.icon}</span>
-                  <h3 className={`font-semibold ${column.color}`}>
-                    {column.title} ({getEvaluationsByStatus(column.status).length})
-                  </h3>
-                </div>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.2 }}
+          >
+            <Grid numItemsSm={2} numItemsLg={4} className="gap-6">
+              {PIPELINE_COLUMNS.map((column, columnIndex) => (
+                <motion.div
+                  key={column.status}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.1 * columnIndex }}
+                  className={`rounded-xl border-2 ${column.bgClass} ${column.borderClass} p-4 min-h-[400px]`}
+                >
+                  <Flex alignItems="center" className="mb-4 gap-2">
+                    <column.icon className={`h-5 w-5 text-${column.color}-600`} />
+                    <Title className={`text-${column.color}-700`}>
+                      {column.title}
+                    </Title>
+                    <Badge color={column.color} size="sm">
+                      {getEvaluationsByStatus(column.status).length}
+                    </Badge>
+                  </Flex>
 
-                <div className="space-y-3">
-                  {getEvaluationsByStatus(column.status).map((evaluation) => (
-                    <Card
-                      key={evaluation.id}
-                      className={`cursor-pointer hover:shadow-md transition-shadow ${
-                        updating === evaluation.id ? 'opacity-50' : ''
-                      }`}
-                    >
-                      <CardContent className="p-4">
-                        <div
-                          className="cursor-pointer"
-                          onClick={() => router.push(`/opportunities/${evaluation.opportunity_id}`)}
-                        >
-                          <h4 className="font-medium text-sm line-clamp-2 mb-2">
-                            {evaluation.opportunity.title}
-                          </h4>
+                  <div className="space-y-3">
+                    <AnimatePresence mode="popLayout">
+                      {getEvaluationsByStatus(column.status).map((evaluation) => {
+                        const daysLeft = getDaysUntilDeadline(evaluation.opportunity.response_deadline)
+                        const isUrgent = daysLeft !== null && daysLeft <= 7 && daysLeft > 0
+                        const isPast = daysLeft !== null && daysLeft < 0
 
-                          <div className="flex items-center gap-2 mb-2">
-                            <Badge
-                              variant={
-                                evaluation.recommendation === 'BID'
-                                  ? 'default'
-                                  : evaluation.recommendation === 'RESEARCH'
-                                  ? 'secondary'
-                                  : 'destructive'
-                              }
-                              className="text-xs"
+                        return (
+                          <motion.div
+                            key={evaluation.id}
+                            layout
+                            initial={{ opacity: 0, scale: 0.9 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.9, y: -20 }}
+                            whileHover={{ scale: 1.02 }}
+                            className={updating === evaluation.id ? 'opacity-50' : ''}
+                          >
+                            <Card
+                              className={`cursor-pointer transition-shadow hover:shadow-lg ${
+                                isUrgent ? 'ring-2 ring-amber-400' : ''
+                              } ${isPast ? 'opacity-60' : ''}`}
                             >
-                              {evaluation.recommendation}
-                            </Badge>
-                            <span className="text-xs text-gray-500">
-                              {evaluation.fit_score}% fit
-                            </span>
-                          </div>
+                              <div
+                                onClick={() => router.push(`/opportunities/${evaluation.opportunity_id}`)}
+                              >
+                                <Text className="font-medium line-clamp-2 mb-2">
+                                  {evaluation.opportunity.title}
+                                </Text>
 
-                          <div className="text-xs text-gray-500 space-y-1">
-                            <div>{evaluation.opportunity.department}</div>
-                            <div className="flex items-center gap-1">
-                              <span>Deadline:</span>
-                              <span
-                                className={
-                                  isDeadlinePassed(evaluation.opportunity.response_deadline)
-                                    ? 'text-red-600 font-medium'
-                                    : isDeadlineSoon(evaluation.opportunity.response_deadline)
-                                    ? 'text-orange-600 font-medium'
-                                    : ''
-                                }
-                              >
-                                {formatDate(evaluation.opportunity.response_deadline)}
-                                {isDeadlinePassed(evaluation.opportunity.response_deadline) && ' (Passed)'}
-                                {isDeadlineSoon(evaluation.opportunity.response_deadline) &&
-                                  !isDeadlinePassed(evaluation.opportunity.response_deadline) && ' (Soon!)'}
-                              </span>
-                            </div>
-                            <div>Value: {formatCurrency(evaluation.opportunity.contract_value)}</div>
-                          </div>
+                                <Flex className="gap-2 mb-2">
+                                  <Badge
+                                    color={
+                                      evaluation.recommendation === 'BID' ? 'emerald' :
+                                      evaluation.recommendation === 'RESEARCH' ? 'amber' : 'rose'
+                                    }
+                                    size="xs"
+                                  >
+                                    {evaluation.recommendation}
+                                  </Badge>
+                                  <Badge color="gray" size="xs">
+                                    {evaluation.fit_score}%
+                                  </Badge>
+                                </Flex>
 
-                          {evaluation.user_notes && (
-                            <div className="mt-2 p-2 bg-yellow-50 rounded text-xs text-gray-700">
-                              <strong>Notes:</strong> {evaluation.user_notes.substring(0, 50)}
-                              {evaluation.user_notes.length > 50 && '...'}
-                            </div>
-                          )}
-                        </div>
+                                <div className="space-y-1 text-xs">
+                                  {evaluation.opportunity.department && (
+                                    <Flex className="gap-1">
+                                      <Building2 className="h-3 w-3 text-gray-400" />
+                                      <Text className="truncate text-gray-600">
+                                        {evaluation.opportunity.department}
+                                      </Text>
+                                    </Flex>
+                                  )}
+                                  <Flex className="gap-1">
+                                    <Clock className={`h-3 w-3 ${isPast ? 'text-red-500' : isUrgent ? 'text-amber-500' : 'text-gray-400'}`} />
+                                    <Text className={isPast ? 'text-red-600' : isUrgent ? 'text-amber-600' : 'text-gray-600'}>
+                                      {formatDate(evaluation.opportunity.response_deadline)}
+                                      {isPast && ' (Passed)'}
+                                      {isUrgent && !isPast && ` (${daysLeft}d left)`}
+                                    </Text>
+                                  </Flex>
+                                  <Flex className="gap-1">
+                                    <DollarSign className="h-3 w-3 text-emerald-500" />
+                                    <Text className="text-emerald-600 font-medium">
+                                      {formatCurrency(evaluation.opportunity.contract_value)}
+                                    </Text>
+                                  </Flex>
+                                </div>
+                              </div>
 
-                        {/* Status Change Buttons */}
-                        <div className="mt-3 pt-3 border-t border-gray-200">
-                          <div className="flex flex-wrap gap-1">
-                            {column.status !== 'WATCHING' && (
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="text-xs px-2 py-1 h-auto"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  handleStatusChange(evaluation.id, 'WATCHING')
-                                }}
-                                disabled={updating === evaluation.id}
-                              >
-                                👀
-                              </Button>
-                            )}
-                            {column.status !== 'BIDDING' && (
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="text-xs px-2 py-1 h-auto"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  handleStatusChange(evaluation.id, 'BIDDING')
-                                }}
-                                disabled={updating === evaluation.id}
-                              >
-                                📝
-                              </Button>
-                            )}
-                            {column.status !== 'WON' && (
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="text-xs px-2 py-1 h-auto text-green-600"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  handleStatusChange(evaluation.id, 'WON')
-                                }}
-                                disabled={updating === evaluation.id}
-                              >
-                                🎉
-                              </Button>
-                            )}
-                            {column.status !== 'LOST' && (
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="text-xs px-2 py-1 h-auto text-gray-600"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  handleStatusChange(evaluation.id, 'LOST')
-                                }}
-                                disabled={updating === evaluation.id}
-                              >
-                                ❌
-                              </Button>
-                            )}
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="text-xs px-2 py-1 h-auto text-red-600 ml-auto"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                handleRemoveFromPipeline(evaluation.id)
-                              }}
-                              disabled={updating === evaluation.id}
-                            >
-                              Remove
-                            </Button>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
+                              {/* Actions */}
+                              <div className="mt-3 pt-3 border-t border-gray-200">
+                                <Flex justifyContent="between">
+                                  <Flex className="gap-1">
+                                    {PIPELINE_COLUMNS.filter(c => c.status !== column.status).slice(0, 2).map((targetCol) => (
+                                      <button
+                                        key={targetCol.status}
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          handleStatusChange(evaluation.id, targetCol.status)
+                                        }}
+                                        disabled={updating === evaluation.id}
+                                        className={`p-1.5 rounded-lg hover:bg-${targetCol.color}-100 transition-colors`}
+                                        title={`Move to ${targetCol.title}`}
+                                      >
+                                        <targetCol.icon className={`h-4 w-4 text-${targetCol.color}-600`} />
+                                      </button>
+                                    ))}
+                                  </Flex>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      handleRemoveFromPipeline(evaluation.id)
+                                    }}
+                                    disabled={updating === evaluation.id}
+                                    className="p-1.5 rounded-lg hover:bg-red-100 transition-colors"
+                                    title="Remove from pipeline"
+                                  >
+                                    <Trash2 className="h-4 w-4 text-red-500" />
+                                  </button>
+                                </Flex>
+                              </div>
+                            </Card>
+                          </motion.div>
+                        )
+                      })}
+                    </AnimatePresence>
 
-                  {getEvaluationsByStatus(column.status).length === 0 && (
-                    <div className="text-center py-8 text-gray-400 text-sm">
-                      No opportunities
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
+                    {getEvaluationsByStatus(column.status).length === 0 && (
+                      <div className="text-center py-8">
+                        <Text className="text-gray-400 text-sm">
+                          No opportunities
+                        </Text>
+                      </div>
+                    )}
+                  </div>
+                </motion.div>
+              ))}
+            </Grid>
+          </motion.div>
         )}
-      </main>
-    </div>
+    </main>
   )
 }

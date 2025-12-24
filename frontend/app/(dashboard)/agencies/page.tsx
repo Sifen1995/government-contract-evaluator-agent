@@ -5,26 +5,42 @@ import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
 import { getAgencies, getRecommendedAgencies } from '@/lib/agencies'
 import { AgencyWithStats, AgencyWithMatch } from '@/types/agency'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
+import { motion } from 'framer-motion'
+import {
+  Card,
+  Title,
+  Text,
+  Grid,
+  Badge,
+  Flex,
+  Metric,
+  ProgressBar,
+  TabGroup,
+  TabList,
+  Tab,
+  TextInput,
+} from '@tremor/react'
+import {
+  Building2,
+  Search,
+  Star,
+  TrendingUp,
+  DollarSign,
+  FileText,
+  Sparkles,
+  ArrowRight,
+} from 'lucide-react'
 
 export default function AgenciesPage() {
-  const { user, loading: authLoading } = useAuth()
+  const { user } = useAuth()
   const router = useRouter()
 
   const [recommendedAgencies, setRecommendedAgencies] = useState<AgencyWithMatch[]>([])
   const [allAgencies, setAllAgencies] = useState<AgencyWithStats[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<'recommended' | 'all'>('recommended')
+  const [activeTab, setActiveTab] = useState(0)
   const [searchQuery, setSearchQuery] = useState('')
-
-  useEffect(() => {
-    if (!authLoading && !user) {
-      router.push('/login')
-    }
-  }, [user, authLoading, router])
 
   useEffect(() => {
     const loadAgencies = async () => {
@@ -49,11 +65,11 @@ export default function AgenciesPage() {
     loadAgencies()
   }, [user])
 
-  const getScoreColor = (score: number) => {
-    if (score >= 80) return 'text-green-600 bg-green-100'
-    if (score >= 60) return 'text-blue-600 bg-blue-100'
-    if (score >= 40) return 'text-yellow-600 bg-yellow-100'
-    return 'text-gray-600 bg-gray-100'
+  const getScoreColor = (score: number): 'emerald' | 'blue' | 'amber' | 'gray' => {
+    if (score >= 80) return 'emerald'
+    if (score >= 60) return 'blue'
+    if (score >= 40) return 'amber'
+    return 'gray'
   }
 
   const formatCurrency = (value: number) => {
@@ -67,226 +83,270 @@ export default function AgenciesPage() {
     (agency.abbreviation && agency.abbreviation.toLowerCase().includes(searchQuery.toLowerCase()))
   )
 
-  if (authLoading || loading) {
+  if (!user) return null
+
+  if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600" />
-      </div>
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="flex items-center justify-center py-24">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="flex flex-col items-center gap-4"
+          >
+            <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-xl flex items-center justify-center animate-pulse">
+              <Sparkles className="h-6 w-6 text-white" />
+            </div>
+            <Text className="text-gray-600">Loading agencies...</Text>
+          </motion.div>
+        </div>
+      </main>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Navigation */}
-      <nav className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16">
-            <div className="flex items-center gap-6">
-              <h1 className="text-2xl font-bold text-gray-900">GovAI</h1>
-              <div className="flex gap-4">
-                <Button variant="ghost" onClick={() => router.push('/dashboard')}>
-                  Dashboard
-                </Button>
-                <Button variant="ghost" onClick={() => router.push('/opportunities')}>
-                  Opportunities
-                </Button>
-                <Button variant="ghost" onClick={() => router.push('/pipeline')}>
-                  Pipeline
-                </Button>
-                <Button variant="ghost" className="font-semibold">
-                  Agencies
-                </Button>
-                <Button variant="ghost" onClick={() => router.push('/settings')}>
-                  Settings
-                </Button>
-              </div>
-            </div>
-            <div className="flex items-center gap-4">
-              <span className="text-sm text-gray-600">{user?.email}</span>
-              <Button variant="outline" onClick={() => {
-                localStorage.removeItem('token')
-                router.push('/login')
-              }}>
-                Logout
-              </Button>
-            </div>
-          </div>
-        </div>
-      </nav>
-
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
-        <div className="mb-8">
-          <h2 className="text-3xl font-bold text-gray-900">Agency Matching</h2>
-          <p className="text-gray-600">Find agencies that match your company's capabilities</p>
-        </div>
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-8"
+        >
+          <Title className="text-3xl font-bold text-gray-900">
+            Agency Matching
+          </Title>
+          <Text className="mt-1 text-gray-600">
+            Find agencies that match your company's capabilities
+          </Text>
+        </motion.div>
 
-        {/* Tabs */}
-        <div className="flex gap-4 mb-6">
-          <Button
-            variant={activeTab === 'recommended' ? 'default' : 'outline'}
-            onClick={() => setActiveTab('recommended')}
-          >
-            Recommended for You
-          </Button>
-          <Button
-            variant={activeTab === 'all' ? 'default' : 'outline'}
-            onClick={() => setActiveTab('all')}
-          >
-            All Agencies
-          </Button>
-        </div>
+        {/* Tabs & Search */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="mb-6"
+        >
+          <Card>
+            <Flex justifyContent="between" alignItems="center" className="flex-wrap gap-4">
+              <TabGroup index={activeTab} onIndexChange={setActiveTab}>
+                <TabList variant="solid">
+                  <Tab icon={Star}>Recommended for You</Tab>
+                  <Tab icon={Building2}>All Agencies</Tab>
+                </TabList>
+              </TabGroup>
+
+              {activeTab === 1 && (
+                <TextInput
+                  icon={Search}
+                  placeholder="Search agencies..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="max-w-xs"
+                />
+              )}
+            </Flex>
+          </Card>
+        </motion.div>
 
         {error && (
-          <div className="bg-red-50 text-red-600 p-4 rounded-lg mb-6">
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="bg-red-50 border border-red-200 text-red-600 p-4 rounded-lg mb-6"
+          >
             {error}
-          </div>
+          </motion.div>
         )}
 
-        {activeTab === 'recommended' ? (
+        {/* Recommended Agencies Tab */}
+        {activeTab === 0 && (
           <>
             {recommendedAgencies.length > 0 ? (
-              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {recommendedAgencies.map((agency) => (
-                  <Card
+              <Grid numItemsSm={1} numItemsMd={2} numItemsLg={3} className="gap-6">
+                {recommendedAgencies.map((agency, index) => (
+                  <motion.div
                     key={agency.id}
-                    className="cursor-pointer hover:shadow-lg transition-shadow"
-                    onClick={() => router.push(`/agencies/${agency.id}`)}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.05 * index }}
                   >
-                    <CardHeader>
-                      <div className="flex justify-between items-start">
-                        <div>
-                          <CardTitle className="text-lg">
+                    <Card
+                      className="cursor-pointer transition-all duration-200 hover:shadow-lg hover:scale-[1.02]"
+                      onClick={() => router.push(`/agencies/${agency.id}`)}
+                    >
+                      <Flex justifyContent="between" alignItems="start" className="mb-4">
+                        <div className="flex-1">
+                          <Title className="text-lg">
                             {agency.abbreviation || agency.name}
-                          </CardTitle>
+                          </Title>
                           {agency.abbreviation && (
-                            <CardDescription className="text-sm">
+                            <Text className="text-sm text-gray-500 truncate">
                               {agency.name}
-                            </CardDescription>
+                            </Text>
                           )}
                         </div>
                         {agency.match_score !== undefined && (
-                          <div className={`px-3 py-1 rounded-lg ${getScoreColor(agency.match_score)}`}>
-                            <span className="font-bold">{agency.match_score}%</span>
+                          <div className="flex flex-col items-end">
+                            <Badge color={getScoreColor(agency.match_score)} size="lg">
+                              {agency.match_score}% Match
+                            </Badge>
                           </div>
                         )}
-                      </div>
-                    </CardHeader>
-                    <CardContent>
+                      </Flex>
+
+                      {agency.match_score !== undefined && (
+                        <ProgressBar
+                          value={agency.match_score}
+                          color={getScoreColor(agency.match_score)}
+                          className="mb-4"
+                        />
+                      )}
+
                       <div className="space-y-3">
                         {agency.level && (
-                          <Badge variant="outline" className="capitalize">
+                          <Badge color="gray" size="sm" className="capitalize">
                             {agency.level}
                           </Badge>
                         )}
-                        {agency.opportunity_count !== undefined && (
-                          <div className="flex justify-between text-sm">
-                            <span className="text-gray-500">Active Opportunities</span>
-                            <span className="font-medium">{agency.opportunity_count}</span>
-                          </div>
-                        )}
+
+                        <Flex justifyContent="between" className="text-sm">
+                          <Flex className="gap-1">
+                            <FileText className="h-4 w-4 text-gray-400" />
+                            <Text>Active Opportunities</Text>
+                          </Flex>
+                          <Text className="font-semibold">
+                            {agency.opportunity_count ?? 0}
+                          </Text>
+                        </Flex>
+
                         {agency.avg_contract_value !== undefined && agency.avg_contract_value > 0 && (
-                          <div className="flex justify-between text-sm">
-                            <span className="text-gray-500">Avg. Contract Value</span>
-                            <span className="font-medium text-green-600">
+                          <Flex justifyContent="between" className="text-sm">
+                            <Flex className="gap-1">
+                              <DollarSign className="h-4 w-4 text-emerald-500" />
+                              <Text>Avg. Contract</Text>
+                            </Flex>
+                            <Text className="font-semibold text-emerald-600">
                               {formatCurrency(agency.avg_contract_value)}
-                            </span>
-                          </div>
+                            </Text>
+                          </Flex>
                         )}
+
                         {agency.match_reason && (
-                          <p className="text-xs text-gray-500 mt-2 line-clamp-2">
+                          <Text className="text-xs text-gray-500 line-clamp-2 mt-2 pt-2 border-t">
                             {agency.match_reason}
-                          </p>
+                          </Text>
                         )}
                       </div>
-                    </CardContent>
-                  </Card>
+
+                      <Flex className="mt-4 pt-3 border-t" justifyContent="end">
+                        <Text className="text-sm text-blue-600 flex items-center gap-1">
+                          View Details <ArrowRight className="h-4 w-4" />
+                        </Text>
+                      </Flex>
+                    </Card>
+                  </motion.div>
                 ))}
-              </div>
+              </Grid>
             ) : (
-              <Card>
-                <CardContent className="py-12 text-center">
-                  <div className="text-4xl mb-4">🏛️</div>
-                  <h3 className="text-lg font-semibold mb-2">No Recommendations Yet</h3>
-                  <p className="text-gray-500 mb-4">
-                    Complete your company profile to get personalized agency recommendations based on your NAICS codes, certifications, and capabilities.
-                  </p>
-                  <Button onClick={() => router.push('/settings')}>
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+              >
+                <Card className="text-center py-16">
+                  <div className="text-6xl mb-6">🏛️</div>
+                  <Title>No Recommendations Yet</Title>
+                  <Text className="text-gray-500 mt-2 mb-6 max-w-md mx-auto">
+                    Complete your company profile to get personalized agency recommendations
+                    based on your NAICS codes, certifications, and capabilities.
+                  </Text>
+                  <button
+                    onClick={() => router.push('/settings')}
+                    className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                  >
                     Complete Profile
-                  </Button>
-                </CardContent>
-              </Card>
+                  </button>
+                </Card>
+              </motion.div>
             )}
           </>
-        ) : (
-          <>
-            {/* Search */}
-            <div className="mb-6">
-              <input
-                type="text"
-                placeholder="Search agencies..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full max-w-md px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>
+        )}
 
+        {/* All Agencies Tab */}
+        {activeTab === 1 && (
+          <>
             {filteredAgencies.length > 0 ? (
-              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredAgencies.map((agency) => (
-                  <Card
+              <Grid numItemsSm={1} numItemsMd={2} numItemsLg={3} className="gap-6">
+                {filteredAgencies.map((agency, index) => (
+                  <motion.div
                     key={agency.id}
-                    className="cursor-pointer hover:shadow-lg transition-shadow"
-                    onClick={() => router.push(`/agencies/${agency.id}`)}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.03 * Math.min(index, 15) }}
                   >
-                    <CardHeader>
-                      <CardTitle className="text-lg">
-                        {agency.abbreviation || agency.name}
-                      </CardTitle>
-                      {agency.abbreviation && (
-                        <CardDescription className="text-sm">
-                          {agency.name}
-                        </CardDescription>
-                      )}
-                    </CardHeader>
-                    <CardContent>
+                    <Card
+                      className="cursor-pointer transition-all duration-200 hover:shadow-lg hover:scale-[1.02]"
+                      onClick={() => router.push(`/agencies/${agency.id}`)}
+                    >
+                      <div className="mb-4">
+                        <Title className="text-lg">
+                          {agency.abbreviation || agency.name}
+                        </Title>
+                        {agency.abbreviation && (
+                          <Text className="text-sm text-gray-500 truncate">
+                            {agency.name}
+                          </Text>
+                        )}
+                      </div>
+
                       <div className="space-y-3">
                         {agency.level && (
-                          <Badge variant="outline" className="capitalize">
+                          <Badge color="gray" size="sm" className="capitalize">
                             {agency.level}
                           </Badge>
                         )}
-                        {agency.opportunity_count !== undefined && (
-                          <div className="flex justify-between text-sm">
-                            <span className="text-gray-500">Active Opportunities</span>
-                            <span className="font-medium">{agency.opportunity_count}</span>
-                          </div>
-                        )}
+
+                        <Flex justifyContent="between" className="text-sm">
+                          <Flex className="gap-1">
+                            <FileText className="h-4 w-4 text-gray-400" />
+                            <Text>Active Opportunities</Text>
+                          </Flex>
+                          <Text className="font-semibold">
+                            {agency.opportunity_count ?? 0}
+                          </Text>
+                        </Flex>
+
                         {agency.avg_contract_value !== undefined && agency.avg_contract_value > 0 && (
-                          <div className="flex justify-between text-sm">
-                            <span className="text-gray-500">Avg. Contract Value</span>
-                            <span className="font-medium text-green-600">
+                          <Flex justifyContent="between" className="text-sm">
+                            <Flex className="gap-1">
+                              <DollarSign className="h-4 w-4 text-emerald-500" />
+                              <Text>Avg. Contract</Text>
+                            </Flex>
+                            <Text className="font-semibold text-emerald-600">
                               {formatCurrency(agency.avg_contract_value)}
-                            </span>
-                          </div>
+                            </Text>
+                          </Flex>
                         )}
                       </div>
-                    </CardContent>
-                  </Card>
+
+                      <Flex className="mt-4 pt-3 border-t" justifyContent="end">
+                        <Text className="text-sm text-blue-600 flex items-center gap-1">
+                          View Details <ArrowRight className="h-4 w-4" />
+                        </Text>
+                      </Flex>
+                    </Card>
+                  </motion.div>
                 ))}
-              </div>
+              </Grid>
             ) : (
-              <Card>
-                <CardContent className="py-12 text-center">
-                  <p className="text-gray-500">
-                    {searchQuery ? 'No agencies match your search' : 'No agencies available'}
-                  </p>
-                </CardContent>
+              <Card className="text-center py-12">
+                <Text className="text-gray-500">
+                  {searchQuery ? 'No agencies match your search' : 'No agencies available'}
+                </Text>
               </Card>
             )}
           </>
         )}
-      </main>
-    </div>
+    </main>
   )
 }
