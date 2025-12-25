@@ -57,14 +57,11 @@ export function LandingPage() {
             <span className="font-display font-bold text-xl">GovAI</span>
           </Link>
           <div className="hidden md:flex items-center gap-8">
-            <Link to="#features" className="text-muted-foreground hover:text-foreground transition-colors">
+            <Link to="/#features" className="text-muted-foreground hover:text-foreground transition-colors">
               Features
             </Link>
-            <Link to="#how-it-works" className="text-muted-foreground hover:text-foreground transition-colors">
+            <Link to="/#how-it-works" className="text-muted-foreground hover:text-foreground transition-colors">
               How it Works
-            </Link>
-            <Link to="#pricing" className="text-muted-foreground hover:text-foreground transition-colors">
-              Pricing
             </Link>
           </div>
           <div className="flex items-center gap-3">
