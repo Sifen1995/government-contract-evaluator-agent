@@ -18,9 +18,14 @@ class OpportunityBase(BaseModel):
     title: str = Field(..., description="Opportunity title")
     description: Optional[str] = Field(None, description="Opportunity description")
     notice_type: Optional[str] = Field(None, description="Notice type")
-    agency: Optional[str] = Field(None, description="Government agency")
-    sub_agency: Optional[str] = Field(None, description="Sub-agency")
-    office: Optional[str] = Field(None, description="Contracting office")
+    # Agency fields - use issuing_agency as the main field
+    issuing_agency: Optional[str] = Field(None, description="Government agency (normalized)")
+    issuing_sub_agency: Optional[str] = Field(None, description="Sub-agency")
+    issuing_office: Optional[str] = Field(None, description="Contracting office")
+    # Legacy aliases for backward compatibility
+    agency: Optional[str] = Field(None, description="Government agency (deprecated, use issuing_agency)")
+    sub_agency: Optional[str] = Field(None, description="Sub-agency (deprecated)")
+    office: Optional[str] = Field(None, description="Contracting office (deprecated)")
     naics_code: Optional[str] = Field(None, description="NAICS code")
     psc_code: Optional[str] = Field(None, description="Product Service Code")
     set_aside_type: Optional[str] = Field(None, description="Set-aside type")
@@ -57,6 +62,9 @@ class OpportunityInDB(OpportunityBase):
     id: str
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+    # Frontend compatibility field
+    department: Optional[str] = Field(None, description="Agency name (frontend alias for issuing_agency)")
+    contract_value: Optional[Decimal] = Field(None, description="Contract value (alias for estimated_value_high)")
 
     @field_validator('id', mode='before')
     @classmethod
@@ -66,6 +74,15 @@ class OpportunityInDB(OpportunityBase):
         if isinstance(v, UUID):
             return str(v)
         return v
+
+    def __init__(self, **data):
+        # Map issuing_agency to department for frontend compatibility
+        if 'department' not in data or data.get('department') is None:
+            data['department'] = data.get('issuing_agency') or data.get('agency')
+        # Map estimated_value_high to contract_value for frontend
+        if 'contract_value' not in data or data.get('contract_value') is None:
+            data['contract_value'] = data.get('estimated_value_high')
+        super().__init__(**data)
 
     class Config:
         from_attributes = True

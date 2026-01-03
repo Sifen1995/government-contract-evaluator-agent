@@ -8,6 +8,11 @@ export interface Opportunity {
   solicitation_number?: string;
   title: string;
   description?: string;
+  // Agency fields - issuing_agency is the normalized field from backend
+  issuing_agency?: string;
+  issuing_sub_agency?: string;
+  issuing_office?: string;
+  // department is an alias for issuing_agency (for backward compatibility)
   department?: string;
   sub_tier?: string;
   office?: string;
