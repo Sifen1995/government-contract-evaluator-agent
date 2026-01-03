@@ -410,20 +410,61 @@ class SAMGovService:
             award_number = raw_data.get("award", {}).get("number", "")
 
             return {
-                "notice_id": notice_id,
+                # Identity fields
+                "source": "sam.gov",
+                "source_id": notice_id,
                 "solicitation_number": solicitation_number,
+
+                # Core information
                 "title": title,
                 "description": description,
+                "notice_type": opportunity_type,
+
+                # Agency fields - normalized to match Opportunity model
+                "issuing_agency": department,
+                "issuing_sub_agency": sub_tier,
+                "issuing_office": office,
+
+                # Classification
+                "naics_code": naics_code,
+                "psc_code": psc_code,
+                "set_aside_type": set_aside,
+
+                # Location
+                "pop_city": pop_city,
+                "pop_state": pop_state,
+                "pop_zip": pop_zip,
+
+                # Dates
+                "posted_date": posted_date,
+                "response_deadline": response_deadline,
+
+                # Financial
+                "estimated_value_high": award_amount,
+
+                # Contact
+                "contact_name": primary_contact_name,
+                "contact_email": primary_contact_email,
+                "contact_phone": primary_contact_phone,
+
+                # Links
+                "source_url": link,
+                "attachments": attachment_links if attachment_links else None,
+
+                # Status
+                "status": "active",
+
+                # Raw data for reference
+                "raw_data": raw_data,
+
+                # Legacy fields for backward compatibility (deprecated)
+                "notice_id": notice_id,
                 "department": department,
                 "sub_tier": sub_tier,
                 "office": office,
-                "naics_code": naics_code,
                 "naics_description": naics_description,
-                "psc_code": psc_code,
                 "set_aside": set_aside,
                 "contract_value": award_amount,
-                "posted_date": posted_date,
-                "response_deadline": response_deadline,
                 "archive_date": archive_date,
                 "place_of_performance_city": pop_city,
                 "place_of_performance_state": pop_state,
@@ -437,7 +478,6 @@ class SAMGovService:
                 "type": opportunity_type,
                 "award_number": award_number,
                 "award_amount": award_amount,
-                "raw_data": raw_data,
                 "is_active": True,
                 "last_synced_at": datetime.utcnow()
             }
