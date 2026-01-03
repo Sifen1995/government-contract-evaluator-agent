@@ -1,7 +1,7 @@
 """
 Pydantic schemas for Opportunity and Evaluation models
 """
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from decimal import Decimal
@@ -75,14 +75,14 @@ class OpportunityInDB(OpportunityBase):
             return str(v)
         return v
 
-    def __init__(self, **data):
-        # Map issuing_agency to department for frontend compatibility
-        if 'department' not in data or data.get('department') is None:
-            data['department'] = data.get('issuing_agency') or data.get('agency')
-        # Map estimated_value_high to contract_value for frontend
-        if 'contract_value' not in data or data.get('contract_value') is None:
-            data['contract_value'] = data.get('estimated_value_high')
-        super().__init__(**data)
+    @model_validator(mode='after')
+    def populate_frontend_fields(self):
+        """Map issuing_agency to department and estimated_value_high to contract_value for frontend compatibility"""
+        if not self.department:
+            self.department = self.issuing_agency or self.agency
+        if not self.contract_value:
+            self.contract_value = self.estimated_value_high
+        return self
 
     class Config:
         from_attributes = True
